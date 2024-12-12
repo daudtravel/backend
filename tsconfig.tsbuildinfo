@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/config/sql.ts","./src/handlers/users.ts","./src/mail/index.ts","./src/middlewares/auth.ts","./src/middlewares/swagger-middleware.ts","./src/routes/index.ts","./src/routes/api/users.ts","./src/strategies/local-strategy.ts"],"version":"5.7.2"}
