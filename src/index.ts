@@ -12,12 +12,7 @@ import swaggerMiddleware from "./middlewares/swagger-middleware";
 dotenv.config();
 const app = express();
 app.use(cors({
-  origin: [
-    'https://daudtravel.com',
-    'http://localhost:3000'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  origin: 'https://daudtravel.com',
   credentials: true
 }));
 app.use(express.json())

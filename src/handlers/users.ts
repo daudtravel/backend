@@ -2,7 +2,8 @@ import pool from "../config/sql";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from 'uuid';
 import { generateVerificationCode, sendVerificationEmail, storeVerificationCode, verifyEmailCode } from "../mail";
- 
+
+// Function to ensure the users table exists
 const createTableIfNotExist = async () => {
     const userQuery = `
         CREATE TABLE IF NOT EXISTS users (
@@ -15,95 +16,104 @@ const createTableIfNotExist = async () => {
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
-  
+
     try {
         await pool.query(userQuery);
         console.log("User table checked/created successfully");
     } catch (error) {
-        console.error("Error creating table:", error);
+        console.error("Error creating users table:", error);
     }
 };
 
-export const createEmailVerificationTableIfNotExist = async () => {
-  await createTableIfNotExist()
-  await createEmailVerificationTableIfNotExist();
-  const query = `
-    CREATE TABLE IF NOT EXISTS email_verification (
-      email VARCHAR(100) PRIMARY KEY,
-      code VARCHAR(6) NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    )
-  `;
-  
-  try {
-    await pool.query(query);
-    console.log('Email verification table checked/created successfully');
-  } catch (error) {
-    console.error('Error creating email verification table:', error);
-  }
+// Function to ensure the email_verification table exists
+const createEmailVerificationTableIfNotExist = async () => {
+    const query = `
+        CREATE TABLE IF NOT EXISTS email_verification (
+            email VARCHAR(100) PRIMARY KEY,
+            code VARCHAR(6) NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    `;
+
+    try {
+        await pool.query(query);
+        console.log('Email verification table checked/created successfully');
+    } catch (error) {
+        console.error('Error creating email verification table:', error);
+    }
 };
 
+// Function to handle user signup
 export const createUser = async (request: any, response: any) => {
-  
-
   try {
-    await createTableIfNotExist()
-    await createEmailVerificationTableIfNotExist();
-    const { email} = request.body;
+      const { email } = request.body;
+      console.log('Received signup request for email:', email);
 
-    const existingUserCheck = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
-      [email]
-    );
+      // Check if the user already exists
+      console.log('Checking if user exists...');
+      const existingUserCheck = await pool.query(
+          'SELECT * FROM users WHERE email = $1',
+          [email]
+      );
 
-    if (existingUserCheck.rows.length > 0) {
-      return response.status(400).json({ message: 'EMAIL_EXIST' });
-    }
-
-
-    const pendingVerificationCheck = await pool.query(
-      'SELECT * FROM email_verification WHERE email = $1',
-      [email]
-    );
-
-
-    if (pendingVerificationCheck.rows.length > 0) {
-      const codeEntry = pendingVerificationCheck.rows[0];
-      const currentTime = new Date();
-      const codeCreatedAt = new Date(codeEntry.created_at);
-      const timeDiff = currentTime.getTime() - codeCreatedAt.getTime();
-      const minutesDiff = timeDiff / (1000 * 60);
-
-      if (minutesDiff < 15) {
-        return response.status(400).json({ 
-          message: 'VERIFICATION_CODE_ALREADY_SENT',
-          timeRemaining: Math.ceil(15 - minutesDiff)
-        });
+      if (existingUserCheck.rows.length > 0) {
+          console.log('User already exists:', email);
+          return response.status(400).json({ message: 'EMAIL_EXIST' });
       }
 
-      await pool.query(
-        'DELETE FROM email_verification WHERE email = $1',
-        [email]
+      // Check for existing email verification code
+      console.log('Checking for pending verification...');
+      const pendingVerificationCheck = await pool.query(
+          'SELECT * FROM email_verification WHERE email = $1',
+          [email]
       );
-    }
-    const verificationCode = generateVerificationCode();
-    
-    await storeVerificationCode(email, verificationCode);
-    await sendVerificationEmail(email, verificationCode);
-    
-    response.status(201).json({
-      message: 'CODE_SEND',
-      email: email
-    });
 
+      if (pendingVerificationCheck.rows.length > 0) {
+          console.log('Pending verification found for:', email);
+          const codeEntry = pendingVerificationCheck.rows[0];
+          const currentTime = new Date();
+          const codeCreatedAt = new Date(codeEntry.created_at);
+          const timeDiff = currentTime.getTime() - codeCreatedAt.getTime();
+          const minutesDiff = timeDiff / (1000 * 60);
+
+          if (minutesDiff < 15) {
+              console.log('Verification code already sent recently.');
+              return response.status(400).json({
+                  message: 'VERIFICATION_CODE_ALREADY_SENT',
+                  timeRemaining: Math.ceil(15 - minutesDiff)
+              });
+          }
+
+          // Delete expired code
+          await pool.query('DELETE FROM email_verification WHERE email = $1', [email]);
+      }
+
+      // Generate and store a new verification code
+      console.log('Generating verification code...');
+      const verificationCode = generateVerificationCode();
+      await storeVerificationCode(email, verificationCode);
+      console.log('Storing and sending verification code...');
+      await sendVerificationEmail(email, verificationCode);
+
+      console.log('Signup successful, verification code sent.');
+      response.status(201).json({
+          message: 'CODE_SEND',
+          email: email
+      });
   } catch (error) {
-    console.error('Signup error:', error);
-    response.status(500).json({ 
-      message: 'Error in signup process', 
-      details: error instanceof Error ? error.message : error 
-    });
+      console.error('Signup error:', error);
+      response.status(500).json({
+          message: 'Error in signup process',
+          details: error instanceof Error ? error.message : error
+      });
   }
 };
+
+// Call table creation functions on app initialization
+(async () => {
+    await createTableIfNotExist();
+    await createEmailVerificationTableIfNotExist();
+})();
 
 export const verifyEmail = async (request: any, response: any) => {
   try {
