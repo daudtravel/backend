@@ -42,10 +42,11 @@ export const createEmailVerificationTableIfNotExist = async () => {
 };
 
 export const createUser = async (request: any, response: any) => {
-  await createTableIfNotExist()
-  await createEmailVerificationTableIfNotExist();
+  
 
   try {
+    await createTableIfNotExist()
+    await createEmailVerificationTableIfNotExist();
     const { email} = request.body;
 
     const existingUserCheck = await pool.query(
