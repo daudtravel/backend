@@ -25,6 +25,8 @@ const createTableIfNotExist = async () => {
 };
 
 export const createEmailVerificationTableIfNotExist = async () => {
+  await createTableIfNotExist()
+  await createEmailVerificationTableIfNotExist();
   const query = `
     CREATE TABLE IF NOT EXISTS email_verification (
       email VARCHAR(100) PRIMARY KEY,
