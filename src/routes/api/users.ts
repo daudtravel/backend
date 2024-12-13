@@ -45,6 +45,7 @@ usersRouter.post("/api/login", (req, res, next) => {
         }
         
         return res.status(200).json({ 
+          user: user,
           message: "Login successful", 
           
         });
@@ -56,6 +57,28 @@ usersRouter.post("/api/login", (req, res, next) => {
       });
     }
   })(req, res, next);
+});
+
+
+usersRouter.post("/api/logout", (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+      return res.status(500).json({ message: 'Logout failed' });
+    }
+
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        console.error('Session destruction error:', destroyErr);
+        return res.status(500).json({ message: 'Session destruction failed' });
+      }
+      res.clearCookie('connect.sid', { 
+        path: '/', 
+      
+      });
+      res.status(200).json({ message: 'Logout successful' });
+    });
+  });
 });
 
 usersRouter.post("/api/signup", createUser);

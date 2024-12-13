@@ -47,10 +47,6 @@ const createEmailVerificationTableIfNotExist = async () => {
 export const createUser = async (request: any, response: any) => {
   try {
       const { email } = request.body;
-      console.log('Received signup request for email:', email);
-
-      // Check if the user already exists
-      console.log('Checking if user exists...');
       const existingUserCheck = await pool.query(
           'SELECT * FROM users WHERE email = $1',
           [email]
@@ -60,16 +56,12 @@ export const createUser = async (request: any, response: any) => {
           console.log('User already exists:', email);
           return response.status(400).json({ message: 'EMAIL_EXIST' });
       }
-
-      // Check for existing email verification code
-      console.log('Checking for pending verification...');
       const pendingVerificationCheck = await pool.query(
           'SELECT * FROM email_verification WHERE email = $1',
           [email]
       );
 
       if (pendingVerificationCheck.rows.length > 0) {
-          console.log('Pending verification found for:', email);
           const codeEntry = pendingVerificationCheck.rows[0];
           const currentTime = new Date();
           const codeCreatedAt = new Date(codeEntry.created_at);
@@ -84,18 +76,13 @@ export const createUser = async (request: any, response: any) => {
               });
           }
 
-          // Delete expired code
           await pool.query('DELETE FROM email_verification WHERE email = $1', [email]);
       }
 
-      // Generate and store a new verification code
-      console.log('Generating verification code...');
       const verificationCode = generateVerificationCode();
       await storeVerificationCode(email, verificationCode);
-      console.log('Storing and sending verification code...');
       await sendVerificationEmail(email, verificationCode);
 
-      console.log('Signup successful, verification code sent.');
       response.status(201).json({
           message: 'CODE_SEND',
           email: email
@@ -109,7 +96,7 @@ export const createUser = async (request: any, response: any) => {
   }
 };
 
-// Call table creation functions on app initialization
+
 (async () => {
     await createTableIfNotExist();
     await createEmailVerificationTableIfNotExist();
