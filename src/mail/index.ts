@@ -11,10 +11,6 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-export const generateVerificationCode = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
-
 export const sendVerificationEmail = async (email: string, code: string) => {
   try {
     await transporter.sendMail({
@@ -47,7 +43,7 @@ export const sendVerificationEmail = async (email: string, code: string) => {
         </div>
       `,
     });
-    console.log(`Verification email sent to ${email}`);
+
   } catch (error) {
     console.error(`Failed to send verification email to ${email}`, error);
     throw new Error('Failed to send verification email. Please try again.');
@@ -56,17 +52,15 @@ export const sendVerificationEmail = async (email: string, code: string) => {
 
 export const storeVerificationCode = async (email: string, code: string) => {
   const query = `
-    INSERT INTO email_verification (email, code, created_at) 
-    VALUES ($1, $2, CURRENT_TIMESTAMP)
-    ON CONFLICT (email) DO UPDATE 
-    SET code = $2, created_at = CURRENT_TIMESTAMP
+      INSERT INTO email_verification (email, code, created_at) 
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
   `;
   
   try {
-    await pool.query(query, [email, code]);
+      await pool.query(query, [email, code]);
   } catch (error) {
-    console.error('Error storing verification code:', error);
-    throw new Error('Failed to store verification code');
+      console.error('Error storing verification code:', error);
+      throw new Error('Failed to store verification code');
   }
 };
 
@@ -78,14 +72,11 @@ export const verifyEmailCode = async (email: string, code: string) => {
   `;
   
   try {
-
-
     const result = await pool.query(query, [email, code]);
     if (result.rows.length > 0) {
       await pool.query('DELETE FROM email_verification WHERE email = $1', [email]);
       return true;
     }
-    
     return false;
   } catch (error) {
     console.error('Error verifying email code:', error);
