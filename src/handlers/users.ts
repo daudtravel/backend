@@ -121,7 +121,6 @@ export const createAndVerify = async (request: Request, response: Response): Pro
   }
 };
 
-
 export const signin = async (request: Request, response: Response): Promise<void> => {
   try {
       const { email, password } = request.body;
@@ -188,50 +187,6 @@ export const signin = async (request: Request, response: Response): Promise<void
       return;
   }
 };
-
-
-const createTableIfNotExist = async () => {
-  const userQuery = `
-      CREATE TABLE IF NOT EXISTS users (
-          id UUID PRIMARY KEY,
-          firstname VARCHAR(255) NOT NULL,
-          lastname VARCHAR(255) NOT NULL,
-          password VARCHAR(255) NOT NULL,
-          email VARCHAR(100) UNIQUE NOT NULL,
-          is_verified BOOLEAN DEFAULT FALSE,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-  `;
-
-  try {
-      await pool.query(userQuery);
-      console.log("User table checked/created successfully");
-  } catch (error) {
-      console.error("Error creating users table:", error);
-  }
-};
-
-const createEmailVerificationTableIfNotExist = async () => {
-  const query = `
-      CREATE TABLE IF NOT EXISTS email_verification (
-          email VARCHAR(100) PRIMARY KEY,
-          code VARCHAR(6) NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-  `;
-
-  try {
-      await pool.query(query);
-      console.log('Email verification table checked/created successfully');
-  } catch (error) {
-      console.error('Error creating email verification table:', error);
-  }
-};
-
-(async () => {
-  await createTableIfNotExist();
-  await createEmailVerificationTableIfNotExist();
-})();
 
 
 

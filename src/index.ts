@@ -1,10 +1,10 @@
 import express from "express";
 import dotenv from 'dotenv';
 import router from "./routes";
-
 import cors from "cors"
 import swaggerMiddleware from "./middlewares/swagger-middleware";
 import corsMiddleware from "./middlewares/cors-middleware";
+import { initDatabase } from "./database/db.init";
 
 
 dotenv.config();
@@ -15,12 +15,26 @@ app.use(corsMiddleware)
 app.use(express.json())
  
 app.use("/api", router);
-app.use("/api", ...swaggerMiddleware);
+app.use("/api", ...swaggerMiddleware)
 
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Running on ${PORT}`);
-});
+
+
+(async () => {
+  try {
+    await initDatabase();
+    console.log('Database tables initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database tables:', error);
+    process.exit(1);  
+  }
+  app.listen(PORT, () => {
+    console.log(`Running on ${PORT}`);
+  });
+})();
+
+
+
 
 export default app;
