@@ -13,5 +13,6 @@ export const CreateToursSchema = z.object({
   duration: z.number().positive("Duration must be positive"),
   total_price: z.number().positive("Total price must be positive"),
   reservation_price: z.number().positive("Reservation price must be positive"),
-  image_url: z.string().url("Invalid image URL"),
+  image: z.string().regex(/^data:image\/[a-zA-Z]+;base64,/),
+  gallery: z.array(z.string().regex(/^data:image\/[a-zA-Z]+;base64,/)).optional(),
 });

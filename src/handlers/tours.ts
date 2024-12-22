@@ -1,11 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
-import { z } from 'zod';
 import pool from '../config/sql';
 import { Response, Request } from 'express';
 import { CreateToursSchema } from '../schemas/tours/createToursSchema';
 import { QueryParamsSchema } from '../schemas/tours/getToursSchema';
+import { saveBase64Images } from '../utils/base64/convertBase64';
  
-
 
 
 
@@ -20,19 +19,44 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    const { localizations, duration, total_price, reservation_price, image, gallery = [] } = result.data;
+
+    const names = localizations.map(item => item.name);
+    const checkQuery = `
+      SELECT EXISTS (
+        SELECT 1 FROM tours
+        WHERE localizations @> ANY (
+          SELECT jsonb_build_array(
+            jsonb_build_object('name', name)
+          )::jsonb
+          FROM unnest($1::text[]) AS name
+        )
+      );
+    `;
+
+    const { rows: [{ exists: nameExists }] } = await pool.query(checkQuery, [names]);
+
+    if (nameExists) {
+      res.status(409).json({
+        message: 'Tour with one of these names already exists',
+      });
+      return;
+    }
+
     const tourId = uuidv4();
-    const { localizations, duration, total_price, reservation_price, image_url } = result.data;
+    const { mainImageUrl, galleryUrls } = await saveBase64Images(image, gallery);
     
-    const query = `
+    const createQuery = `
       INSERT INTO tours (
         id, 
         localizations, 
         duration, 
         total_price, 
         reservation_price, 
-        image_url
+        image,
+        gallery
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *;
     `;
 
@@ -42,10 +66,11 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       duration,
       total_price,
       reservation_price,
-      image_url,
+      mainImageUrl,
+      galleryUrls,
     ];
 
-    const { rows: [createdTour] } = await pool.query(query, values);
+    const { rows: [createdTour] } = await pool.query(createQuery, values);
     
     res.status(201).json({
       message: 'Tour created successfully',
@@ -55,11 +80,14 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
   } catch (error) {
     console.error('Error creating tour:', error);
     res.status(500).json({ 
-      message: 'Internal server error while creating tour',
-       
+      message: 'Internal server error while creating tour'
     });
   }
 };
+
+
+
+
 
 
 export const getAllTours = async (req: Request, res: Response): Promise<void> => {
@@ -82,7 +110,7 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         t.total_price,
         t.reservation_price,
         t.duration,
-        t.image_url,
+        t.image,
         t.created_at,
         t.updated_at,
         COUNT(*) OVER() as total_count,
