@@ -4,6 +4,7 @@ import { Response, Request } from 'express';
 import { CreateToursSchema } from '../schemas/tours/createToursSchema';
 import { QueryParamsSchema } from '../schemas/tours/getToursSchema';
 import { saveBase64Images } from '../utils/base64/convertBase64';
+import { z } from 'zod';
  
 
 
@@ -195,6 +196,102 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+const ParamsSchema = z.object({
+  id: z.string().uuid()
+});
+
+// Optional query parameter for locale
+const QuerySchema = z.object({
+  locale: z.string().min(2).max(5).optional()
+});
+
+export const getTourById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Validate route parameters
+    const paramsResult = ParamsSchema.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({
+        message: 'Invalid tour ID',
+        errors: paramsResult.error.format()
+      });
+      return;
+    }
+
+    // Validate query parameters
+    const queryResult = QuerySchema.safeParse(req.query);
+    if (!queryResult.success) {
+      res.status(400).json({
+        message: 'Invalid query parameters',
+        errors: queryResult.error.format()
+      });
+      return;
+    }
+
+    const { id } = paramsResult.data;
+    const { locale } = queryResult.data;
+
+    let query = `
+      SELECT 
+        t.id,
+        t.total_price,
+        t.reservation_price,
+        t.duration,
+        t.image,
+        t.gallery,
+        t.created_at,
+        t.updated_at,
+        CASE 
+          WHEN $2::text IS NOT NULL THEN (
+            SELECT jsonb_agg(loc)
+            FROM jsonb_array_elements(t.localizations) loc
+            WHERE loc->>'locale' = $2
+          )
+          ELSE t.localizations
+        END as localizations
+      FROM tours t
+      WHERE t.id = $1
+    `;
+
+    const { rows } = await pool.query(query, [id, locale || null]);
+
+    if (rows.length === 0) {
+      res.status(404).json({
+        message: 'Tour not found',
+        data: null
+      });
+      return;
+    }
+
+    // Transform the response to match your API format
+    const tour = {
+      ...rows[0],
+      localizations: rows[0].localizations || [],
+      // Transform localizations into translations format if needed
+      translations: (rows[0].localizations || []).reduce((acc: any, loc: any) => {
+        acc[loc.locale] = {
+          name: loc.name,
+          destination: loc.destination,
+          description: loc.description
+        };
+        return acc;
+      }, {})
+    };
+
+    res.status(200).json({
+      message: 'Tour retrieved successfully',
+      data: {
+        tour
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching tour:', error);
+    res.status(500).json({
+      message: 'Internal server error while fetching tour',
+      error: process.env.NODE_ENV === 'development' ? error : undefined
+    });
+  }
+};
 
 
 

@@ -1,24 +1,34 @@
-
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs/promises';
 
 
-export const saveBase64Image = async (base64String: string): Promise<string> => {
-    try {
-    
-      const base64Data = base64String.replace(/^data:image\/\w+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      const filename = `${uuidv4()}${path.extname(base64String.substring(base64String.indexOf('/') + 1, base64String.indexOf(';')))}`;
-      const uploadDir = path.join(__dirname, '../uploads');
-      await fs.mkdir(uploadDir, { recursive: true });
-      const filePath = path.join(uploadDir, filename);
-      await fs.writeFile(filePath, buffer);
+const BASE_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'tours');
 
-      return `/uploads/tours/${filename}`;
-      
-    } catch (error) {
-      console.error('Error saving image:', error);
-      throw new Error('Failed to save image');
+export const saveBase64Image = async (base64String: string): Promise<string> => {
+  try {
+
+    if (!base64String || !base64String.includes(';base64,')) {
+      throw new Error('Invalid base64 string format');
     }
-  };
+
+    const matches = base64String.match(/^data:image\/([A-Za-z]+);base64,/);
+    if (!matches) {
+      throw new Error('Invalid image format');
+    }
+    const extension = `.${matches[1]}`;
+    const base64Data = base64String.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    const filename = `${uuidv4()}${extension}`;
+    await fs.mkdir(BASE_UPLOAD_DIR, { recursive: true });
+ 
+    const filePath = path.join(BASE_UPLOAD_DIR, filename);
+    await fs.writeFile(filePath, buffer);
+    
+  
+    return `/uploads/tours/${filename}`;
+  } catch (error) {
+    console.error('Error saving image:', error);
+    throw new Error(`Failed to save image`);
+  }
+};
