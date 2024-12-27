@@ -5,9 +5,30 @@ import fs from 'fs/promises';
 
 const BASE_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'tours');
 
+export const saveBase64Images = async (
+  mainImage: string | null,
+  galleryImages: (string | null)[] = []
+): Promise<{ mainImageUrl: string | null; galleryUrls: (string | null)[] }> => {
+  try {
+    const mainImageUrl = mainImage ? await saveBase64Image(mainImage) : null;
+    const galleryUrls = await Promise.all(
+      galleryImages.map(async (base64String) => {
+        return base64String ? await saveBase64Image(base64String) : null;
+      })
+    );
+    
+    return {
+      mainImageUrl,
+      galleryUrls
+    };
+  } catch (error) {
+    console.error('Error saving images:', error);
+    throw new Error(`Failed to save images`);
+  }
+};
+
 export const saveBase64Image = async (base64String: string): Promise<string> => {
   try {
-
     if (!base64String || !base64String.includes(';base64,')) {
       throw new Error('Invalid base64 string format');
     }
@@ -25,7 +46,6 @@ export const saveBase64Image = async (base64String: string): Promise<string> => 
     const filePath = path.join(BASE_UPLOAD_DIR, filename);
     await fs.writeFile(filePath, buffer);
     
-  
     return `/uploads/tours/${filename}`;
   } catch (error) {
     console.error('Error saving image:', error);

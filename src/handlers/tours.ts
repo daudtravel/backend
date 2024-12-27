@@ -5,8 +5,16 @@ import { CreateToursSchema } from '../schemas/tours/createToursSchema';
 import { QueryParamsSchema } from '../schemas/tours/getToursSchema';
 import { saveBase64Images } from '../utils/base64/convertBase64';
 import { z } from 'zod';
+import { UpdateToursSchema } from '../schemas/tours/updateToursSchema';
  
 
+const QuerySchema = z.object({
+  locale: z.string().min(2).max(5).optional()
+});
+
+const ParamsSchema = z.object({
+  id: z.string().uuid()
+});
 
 
 export const createTour = async (req: Request, res: Response): Promise<void> => {
@@ -85,11 +93,6 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
     });
   }
 };
-
-
-
-
-
 
 export const getAllTours = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -196,15 +199,6 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-const ParamsSchema = z.object({
-  id: z.string().uuid()
-});
-
-// Optional query parameter for locale
-const QuerySchema = z.object({
-  locale: z.string().min(2).max(5).optional()
-});
-
 export const getTourById = async (req: Request, res: Response): Promise<void> => {
   try {
     // Validate route parameters
@@ -217,7 +211,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Validate query parameters
+  
     const queryResult = QuerySchema.safeParse(req.query);
     if (!queryResult.success) {
       res.status(400).json({
@@ -262,11 +256,9 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Transform the response to match your API format
     const tour = {
       ...rows[0],
       localizations: rows[0].localizations || [],
-      // Transform localizations into translations format if needed
       translations: (rows[0].localizations || []).reduce((acc: any, loc: any) => {
         acc[loc.locale] = {
           name: loc.name,
@@ -293,327 +285,143 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+export const updateTour = async (req: Request, res: Response): Promise<void> => {
+  try {
+   
+    const paramsResult = ParamsSchema.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({
+        message: 'Invalid tour ID',
+        errors: paramsResult.error.format()
+      });
+      return;
+    }
 
+    const { id } = paramsResult.data;
 
+   
 
-// const createToursTableIfNotExists = async () => {
-//   const insertTourQuery = `
-//   INSERT INTO tours (id, price, reservation_price, localizations, duration, image_url)
-//   VALUES ($1, $2, $3, $4, $5, $6)
-// `;
+    // Validate request body
+    const result = UpdateToursSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({
+        message: 'Invalid input data',
+        errors: result.error.format(),
+      });
+      return;
+    }
 
-// const tourData = {
-//   id: 'your-uuid',
-//   price: 123.45,
-//   reservation_price: 23.45,
-//   localizations: [
-//     { locale: 'en', name: 'English Name', destination: 'English Destination', description: 'English Description' },
-//     { locale: 'ka', name: 'ქართული სახელი', destination: 'ქართული დანიშნულება', description: 'ქართული აღწერა' },
-//     { locale: 'ru', name: 'Русское имя', destination: 'Русское назначение', description: 'Русское описание' }
-//   ],
-//   duration: 10.5,
-//   image_url: 'https://example.com/image.jpg'
-// };
+    const { localizations, duration, total_price, reservation_price, image, gallery = [] } = result.data;
 
-// try {
-//   await pool.query(insertTourQuery, [
-//     tourData.id,
-//     tourData.price,
-//     tourData.reservation_price,
-//     JSON.stringify(tourData.localizations),
-//     tourData.duration,
-//     tourData.image_url
-//   ]);
-//   console.log("Tour inserted successfully");
-// } catch (error) {
-//   console.error("Error inserting tour:", error);
-//   throw error;
-// }
-// };
-
-// export const createTour = async (req: any, res: any) => {
-//   try {
-//     await createToursTableIfNotExist();
+    // Check if the tour exists
+    const checkQuery = `
+      SELECT EXISTS (
+        SELECT 1 FROM tours WHERE id = $1
+      ) AS exists;
+    `;
     
-//     // Prepare translations with defaults
-//     const body = req.body;
-//     const completeTranslations = {
-//       ...body,
-//       translations: {
-//         en: {
-//           name: 'undefined',
-//           destination: 'undefined',
-//           description: 'undefined'
-//         },
-//         ka: {
-//           name: 'undefined',
-//           destination: 'undefined',
-//           description: 'undefined'
-//         },
-//         ru: {
-//           name: 'undefined',
-//           destination: 'undefined',
-//           description: 'undefined'
-//         },
-//         ...body.translations
-//       }
-//     };
+    const { rows: [{ exists: tourExists }] } = await pool.query(checkQuery, [id]);
 
-//     // Validate the data
-//     const validatedData = TourSchema.parse(completeTranslations);
-
-//     // Check if tour exists
-//     const tourExists = await checkIfTourExists(validatedData.translations);
-//     if (tourExists) {
-//       return res.status(409).json({
-//         message: "TOUR_ALREADY_EXISTS",
-//         error: "A tour with this name and destination already exists",
-//       });
-//     }
-
-//     // Create and insert the tour
-//     const tourId = uuidv4();
-//     const newTour = await insertNewTour(tourId, validatedData);
-
-//     res.status(201).json({
-//       message: "TOUR_CREATED_SUCCESSFULLY",
-//       tour: newTour,
-//     });
-//   } catch (error) {
-//     handleError(error, res);
-//   }
-// };
-
-// const checkIfTourExists = async (translations: any) => {
-//   const query = `
-//     SELECT * FROM tours 
-//     WHERE 
-//       (translations->'ka'->>'name' = $1 OR translations->'en'->>'name' = $1 OR translations->'ru'->>'name' = $1)
-//       AND 
-//       (translations->'ka'->>'destination' = $2 OR translations->'en'->>'destination' = $2 OR translations->'ru'->>'destination' = $2)
-//   `;
+    if (!tourExists) {
+      res.status(404).json({
+        message: 'Tour not found',
+      });
+      return;
+    }
   
-//   const result = await pool.query(query, [
-//     translations.ka.name || translations.en.name || translations.ru.name, 
-//     translations.ka.destination || translations.en.destination || translations.ru.destination
-//   ]);
-  
-//   return result.rows.length > 0;
-// };
-
-// const insertNewTour = async (tourId: string, validatedData: any) => {
-//   const insertQuery = `
-//     INSERT INTO tours (
-//       id, 
-//       translations, 
-//       duration, 
-//       total_price, 
-//       reservation_price, 
-//       image_url
-//     ) VALUES ($1, $2, $3, $4, $5, $6)
-//     RETURNING *;
-//   `;
-  
-//   const result = await pool.query(insertQuery, [
-//     tourId,
-//     JSON.stringify(validatedData.translations),
-//     validatedData.duration,
-//     validatedData.total_price,
-//     validatedData.reservation_price,
-//     validatedData.image_url,
-//   ]);
-  
-//   return result.rows[0];
-// };
-
-// const handleError = (error: any, res: any) => {
-//   console.error(error);
-  
-//   if (error instanceof z.ZodError) {
-//     return res.status(400).json({
-//       message: "VALIDATION_ERROR",
-//       errors: error.errors
-//     });
-//   }
-  
-//   return res.status(500).json({
-//     message: "INTERNAL_SERVER_ERROR",
-//     error: error.message
-//   });
-// };
-
-
-// export const getAllTours = async (req: any, res: any) => {
-//   try {
-//     const selectQuery = `
-//       SELECT id, translations, duration, total_price, reservation_price
-//       FROM tours
-//       ORDER BY created_at DESC;
-//     `;
-
-//     const result = await pool.query(selectQuery);
-
-//     res.status(200).json({
-//       message: "TOURS_RETRIEVED_SUCCESSFULLY",
-//       tours: result.rows,
-//     });
-//   } catch (error) {
-//     console.error("Error retrieving tours:", error);
-//     res.status(500).json({
-//       message: "INTERNAL_SERVER_ERROR",
-//       error: error instanceof Error ? error.message : "An unexpected error occurred",
-//     });
-//   }
-// };
-
-
-
-
-// export const getTourById = async (req: any, res: any) => {
-//   try {
-//     const { id } = req.params;
-
-//     const result = await pool.query('SELECT * FROM tours WHERE id = $1', [id]);
-    
-//     if (result.rows.length === 0) {
-//       return res.status(404).json({
-//         message: 'TOUR_NOT_FOUND',
-//         error: 'No tour found with the given ID'
-//       });
-//     }
-
-//     res.status(200).json({
-//       message: 'TOUR_FETCHED_SUCCESSFULLY',
-//       tour: result.rows[0]
-//     });
-//   } catch (error) {
-//     console.error('Error fetching tour:', error);
-//     res.status(500).json({
-//       message: 'INTERNAL_SERVER_ERROR',
-//       error: 'Unable to fetch tour'
-//     });
-//   }
-// };
-
-
-// export const updateTour = async (req: any, res: any) => {
-//   try {
-//     const { id } = req.params;
-
-//     // Prepare translations with defaults
-//     const body = req.body;
-//     const completeTranslations = {
-//       ...body,
-//       translations: {
-//         en: {
-//           name: 'undefined',
-//           destination: 'undefined',
-//           description: 'undefined'
-//         },
-//         ka: {
-//           name: 'undefined',
-//           destination: 'undefined',
-//           description: 'undefined'
-//         },
-//         ru: {
-//           name: 'undefined',
-//           destination: 'undefined',
-//           description: 'undefined'
-//         },
-//         ...body.translations
-//       }
-//     };
-
-//     // Validate the data
-//     const validatedData = TourSchema.parse(completeTranslations);
-
-//     // Check if the tour with the given ID exists
-//     const checkQuery = 'SELECT * FROM tours WHERE id = $1';
-//     const checkResult = await pool.query(checkQuery, [id]);
-
-//     if (checkResult.rows.length === 0) {
-//       return res.status(404).json({
-//         message: "TOUR_NOT_FOUND",
-//         error: "Tour with the specified ID does not exist"
-//       });
-//     }
-
-//     // Prepare update query
-//     const updateQuery = `
-//       UPDATE tours 
-//       SET 
-//         translations = $1, 
-//         duration = $2, 
-//         total_price = $3, 
-//         reservation_price = $4, 
-//         image_url = $5,
-//         created_at = CURRENT_TIMESTAMP
-//       WHERE id = $6
-//       RETURNING *
-//     `;
-
-//     const values = [
-//       JSON.stringify(validatedData.translations),
-//       validatedData.duration,
-//       validatedData.total_price,
-//       validatedData.reservation_price,
-//       validatedData.image_url || null,
-//       id
-//     ];
-
-//     const result = await pool.query(updateQuery, values);
-
-//     res.status(200).json({
-//       message: "TOUR_UPDATED_SUCCESSFULLY",
-//       tour: result.rows[0]
-//     });
-//   } catch (error) {
-//     // Error handling
-//     if (error instanceof z.ZodError) {
-//       return res.status(400).json({
-//         message: "VALIDATION_ERROR",
-//         errors: error.errors
-//       });
-//     }
-
-//     console.error('Update Tour Error:', error);
-//     res.status(500).json({
-//       message: "INTERNAL_SERVER_ERROR",
-//       error: "An unexpected error occurred while updating the tour"
-//     });
-//   }
-// };
-
-
-// export const deleteTour = async (req: any, res: any) => {
-//   try {
-//     const { id } = req.params;
-
-//     const deleteQuery = `
-//       DELETE FROM tours 
-//       WHERE id = $1
-//       RETURNING *;
-//     `;
-
-//     const result = await pool.query(deleteQuery, [id]);
-
-//     if (result.rows.length === 0) {
-//       return res.status(404).json({
-//         message: "TOUR_NOT_FOUND",
-//         error: "Tour with the specified ID does not exist or is already deleted"
-//       });
-//     }
-
-//     res.status(200).json({
-//       message: "TOUR_DELETED_SUCCESSFULLY",
-//       tour: result.rows[0]
-//     });
-//   } catch (error) {
-//     handleError(error, res);
-//   }
-// };
- 
+    const { mainImageUrl, galleryUrls } = await saveBase64Images(image, gallery);
  
 
+    // Update query
+    const updateQuery = `
+      UPDATE tours 
+      SET 
+        localizations = $2,
+        duration = $3,
+        total_price = $4,
+        reservation_price = $5,
+        image = $6,
+        gallery = $7,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING *;
+    `;
+
+    const values = [
+      id,
+      JSON.stringify(localizations),
+      duration,
+      total_price,
+      reservation_price,
+      mainImageUrl,
+      galleryUrls,
+    ];
+
+    const { rows: [updatedTour] } = await pool.query(updateQuery, values);
+
+    res.status(200).json({
+      message: 'Tour updated successfully',
+      data: updatedTour
+    });
+
+  } catch (error) {
+    console.error('Error updating tour:', error);
+    res.status(500).json({ 
+      message: 'Internal server error while updating tour'
+    });
+  }
+};
+ 
+
+export const deleteTour = async (req: Request, res: Response): Promise<void> => {
+  try {
+   
+    const paramsResult = ParamsSchema.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({
+        message: 'Invalid tour ID',
+        errors: paramsResult.error.format()
+      });
+      return;
+    }
+
+    const { id } = paramsResult.data;
+
+   
+    const checkQuery = `
+      SELECT EXISTS (
+        SELECT 1 FROM tours WHERE id = $1
+      ) AS exists;
+    `;
+    
+    const { rows: [{ exists: tourExists }] } = await pool.query(checkQuery, [id]);
+
+    if (!tourExists) {
+      res.status(404).json({
+        message: 'Tour not found',
+      });
+      return;
+    }
+ 
+    const deleteQuery = `
+      DELETE FROM tours 
+      WHERE id = $1
+      RETURNING id;
+    `;
+
+    await pool.query(deleteQuery, [id]);
+
+    res.status(200).json({
+      message: 'Tour deleted successfully',
+      data: { id }
+    });
+
+  } catch (error) {
+    console.error('Error deleting tour:', error);
+    res.status(500).json({ 
+      message: 'Internal server error while deleting tour'
+    });
+  }
+};
 
  

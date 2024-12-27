@@ -9,7 +9,7 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
       reservation_price DECIMAL(10, 2) NOT NULL,
       localizations JSONB NOT NULL,
       duration INT NOT NULL,
-      image TEXT NOT NULL,
+      image TEXT,
       gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -18,6 +18,7 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
   
   try {
     await pool.query(toursQuery);
+    console.log("tours created")
   } catch (error) {
     console.error('Error creating tours table:', error);
     throw error; 
