@@ -287,7 +287,6 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
 
 export const updateTour = async (req: Request, res: Response): Promise<void> => {
   try {
-   
     const paramsResult = ParamsSchema.safeParse(req.params);
     if (!paramsResult.success) {
       res.status(400).json({
@@ -298,9 +297,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     }
 
     const { id } = paramsResult.data;
-
-   
-
+    
     // Validate request body
     const result = UpdateToursSchema.safeParse(req.body);
     if (!result.success) {
@@ -311,51 +308,103 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { localizations, duration, total_price, reservation_price, image, gallery = [] } = result.data;
+    const { 
+      localizations, 
+      duration, 
+      total_price, 
+      reservation_price, 
+      image = null, 
+      gallery = null,
+      deleteImages = null
+    } = result.data;
 
-    // Check if the tour exists
+    // Check if the tour exists and get current data
     const checkQuery = `
-      SELECT EXISTS (
-        SELECT 1 FROM tours WHERE id = $1
-      ) AS exists;
+      SELECT gallery, image 
+      FROM tours 
+      WHERE id = $1;
     `;
     
-    const { rows: [{ exists: tourExists }] } = await pool.query(checkQuery, [id]);
+    const { rows: [tour] } = await pool.query(checkQuery, [id]);
 
-    if (!tourExists) {
+    if (!tour) {
       res.status(404).json({
         message: 'Tour not found',
       });
       return;
     }
-  
-    const { mainImageUrl, galleryUrls } = await saveBase64Images(image, gallery);
- 
 
-    // Update query
-    const updateQuery = `
-      UPDATE tours 
-      SET 
-        localizations = $2,
-        duration = $3,
-        total_price = $4,
-        reservation_price = $5,
-        image = $6,
-        gallery = $7,
-        updated_at = NOW()
-      WHERE id = $1
-      RETURNING *;
-    `;
+    // Process images based on what was provided
+    let mainImageUrl = tour.image;  // Keep existing image by default
+    let updatedGallery = tour.gallery || []; // Keep existing gallery by default
 
-    const values = [
+    // First handle image deletions if specified
+    if (deleteImages !== null && deleteImages.length > 0) {
+      updatedGallery = updatedGallery.filter(
+        (imageUrl: string) => !deleteImages.includes(imageUrl)
+      );
+    }
+
+    // Then handle new images if provided
+    if (image !== null || gallery !== null) {
+      let galleryUrls: string[] = [];
+      
+      if (image && gallery) {
+        // Both image and gallery provided
+        const processedImages = await saveBase64Images(image, gallery);
+        mainImageUrl = processedImages.mainImageUrl;
+        galleryUrls = processedImages.galleryUrls;
+      } else if (image) {
+        // Only main image provided
+        const processedImages = await saveBase64Images(image, []);
+        mainImageUrl = processedImages.mainImageUrl;
+      } else if (gallery) {
+        // Only gallery images provided
+        const processedImages = await saveBase64Images(null, gallery);
+        galleryUrls = processedImages.galleryUrls;
+      }
+
+      // Add new gallery images if provided
+      if (gallery !== null) {
+        updatedGallery = [...updatedGallery, ...galleryUrls];
+      }
+    }
+
+    // Dynamically build the update query and values
+    let updateFields = [
+      'localizations = $2',
+      'duration = $3',
+      'total_price = $4',
+      'reservation_price = $5',
+      'updated_at = NOW()'
+    ];
+    
+    let values = [
       id,
       JSON.stringify(localizations),
       duration,
       total_price,
       reservation_price,
-      mainImageUrl,
-      galleryUrls,
     ];
+
+    // Only include image in update if it was provided
+    if (image !== null) {
+      updateFields.push(`image = $${values.length + 1}`);
+      values.push(mainImageUrl);
+    }
+
+    // Include gallery in update if either new gallery was provided or images were deleted
+    if (gallery !== null || deleteImages !== null) {
+      updateFields.push(`gallery = $${values.length + 1}`);
+      values.push(updatedGallery);
+    }
+
+    const updateQuery = `
+      UPDATE tours 
+      SET ${updateFields.join(', ')}
+      WHERE id = $1
+      RETURNING *;
+    `;
 
     const { rows: [updatedTour] } = await pool.query(updateQuery, values);
 
@@ -366,7 +415,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
 
   } catch (error) {
     console.error('Error updating tour:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Internal server error while updating tour'
     });
   }
