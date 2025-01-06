@@ -24,6 +24,7 @@ export interface PaginationInfo {
     duration: number;
     total_price: number;
     reservation_price: number;
+    public: boolean,
     image_url: string;
     created_at: Date;
     updated_at: Date;

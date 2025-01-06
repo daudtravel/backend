@@ -5,10 +5,11 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
   const toursQuery = `
     CREATE TABLE IF NOT EXISTS tours (
       id UUID PRIMARY KEY,
-      total_price DECIMAL(10, 2) NOT NULL,
-      reservation_price DECIMAL(10, 2) NOT NULL,
+      total_price INT NOT NULL,
+      reservation_price INT NOT NULL,
       localizations JSONB NOT NULL,
       duration INT NOT NULL,
+      public BOOLEAN DEFAULT false, 
       image TEXT,
       gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

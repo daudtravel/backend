@@ -199,9 +199,134 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+
+
+export const getPublicTours = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = QueryParamsSchema.safeParse(req.query);
+    if (!result.success) {
+      res.status(400).json({
+        message: "Invalid query parameters",
+        errors: result.error.format(),
+      });
+      return;
+    }
+
+    const { page, limit, sortBy, sortOrder, locale, minPrice, maxPrice, destination } = result.data;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT 
+        t.id,
+        t.total_price,
+        t.reservation_price,
+        t.duration,
+        t.image,
+        t.created_at,
+        t.updated_at,
+        COUNT(*) OVER() as total_count,
+        CASE
+          WHEN $1::text IS NOT NULL THEN (
+            SELECT jsonb_agg(loc)
+            FROM jsonb_array_elements(t.localizations) loc
+            WHERE loc->>'locale' = $1
+          )
+          ELSE t.localizations
+        END as localizations
+      FROM tours t
+      WHERE t.public = true
+    `;
+
+    const queryParams: any[] = [locale || null];
+
+    if (locale) {
+      query += `
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(t.localizations) loc
+          WHERE loc->>'locale' = $1
+        )
+      `;
+    }
+
+    if (destination) {
+      queryParams.push(destination);
+      query += `
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(t.localizations) loc
+          WHERE loc->>'destination' = $${queryParams.length}
+        )
+      `;
+    }
+
+    if (minPrice !== undefined) {
+      queryParams.push(minPrice);
+      query += ` AND t.total_price >= $${queryParams.length}`;
+    }
+
+    if (maxPrice !== undefined) {
+      queryParams.push(maxPrice);
+      query += ` AND t.total_price <= $${queryParams.length}`;
+    }
+
+    query += `
+      ORDER BY ${sortBy} ${sortOrder}
+      LIMIT $${queryParams.length + 1}
+      OFFSET $${queryParams.length + 2}
+    `;
+    queryParams.push(limit, offset);
+
+    const { rows } = await pool.query(query, queryParams);
+
+    if (rows.length === 0) {
+      res.status(200).json({
+        message: "No tours found",
+        data: {
+          tours: [],
+          pagination: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          },
+        },
+      });
+      return;
+    }
+
+    const totalCount = parseInt(rows[0].total_count);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const tours = rows.map((tour) => ({
+      ...tour,
+      localizations: tour.localizations || [],
+      total_count: undefined,
+    }));
+
+    res.status(200).json({
+      message: "Tours retrieved successfully",
+      data: {
+        tours,
+        pagination: {
+          total: totalCount,
+          page,
+          limit,
+          totalPages,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching tours:", error);
+    res.status(500).json({
+      message: "Internal server error while fetching tours",
+    });
+  }
+};
+
+
 export const getTourById = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Validate route parameters
     const paramsResult = ParamsSchema.safeParse(req.params);
     if (!paramsResult.success) {
       res.status(400).json({
@@ -231,6 +356,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
         t.reservation_price,
         t.duration,
         t.image,
+        t.public,
         t.gallery,
         t.created_at,
         t.updated_at,
@@ -297,8 +423,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     }
 
     const { id } = paramsResult.data;
-    
-    // Validate request body
+
     const result = UpdateToursSchema.safeParse(req.body);
     if (!result.success) {
       res.status(400).json({
@@ -313,6 +438,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       duration, 
       total_price, 
       reservation_price, 
+      public: isPublic, // renamed to avoid keyword conflict
       image = null, 
       gallery = null,
       deleteImages = null
@@ -335,36 +461,30 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     }
 
     // Process images based on what was provided
-    let mainImageUrl = tour.image;  // Keep existing image by default
-    let updatedGallery = tour.gallery || []; // Keep existing gallery by default
+    let mainImageUrl = tour.image;
+    let updatedGallery = tour.gallery || [];
 
-    // First handle image deletions if specified
     if (deleteImages !== null && deleteImages.length > 0) {
       updatedGallery = updatedGallery.filter(
         (imageUrl: string) => !deleteImages.includes(imageUrl)
       );
     }
 
-    // Then handle new images if provided
     if (image !== null || gallery !== null) {
       let galleryUrls: string[] = [];
       
       if (image && gallery) {
-        // Both image and gallery provided
         const processedImages = await saveBase64Images(image, gallery);
         mainImageUrl = processedImages.mainImageUrl;
         galleryUrls = processedImages.galleryUrls;
       } else if (image) {
-        // Only main image provided
         const processedImages = await saveBase64Images(image, []);
         mainImageUrl = processedImages.mainImageUrl;
       } else if (gallery) {
-        // Only gallery images provided
         const processedImages = await saveBase64Images(null, gallery);
         galleryUrls = processedImages.galleryUrls;
       }
 
-      // Add new gallery images if provided
       if (gallery !== null) {
         updatedGallery = [...updatedGallery, ...galleryUrls];
       }
@@ -376,6 +496,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       'duration = $3',
       'total_price = $4',
       'reservation_price = $5',
+      'public = $6', // Added public field
       'updated_at = NOW()'
     ];
     
@@ -385,6 +506,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       duration,
       total_price,
       reservation_price,
+      isPublic, // Added public value
     ];
 
     // Only include image in update if it was provided
@@ -421,7 +543,6 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
   }
 };
  
-
 export const deleteTour = async (req: Request, res: Response): Promise<void> => {
   try {
    

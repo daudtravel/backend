@@ -7,4 +7,8 @@ export const QueryParamsSchema = z.object({
     sortBy: z.enum(['created_at', 'total_price', 'duration']).default('created_at'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
     locale: z.string().min(2).optional().default("ka"),
+    minPrice: z.coerce.number().optional(),
+    maxPrice: z.coerce.number().optional(),
+    destination: z.string().optional(),
+   
   });
