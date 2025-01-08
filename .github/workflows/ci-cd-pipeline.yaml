@@ -20,6 +20,12 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Debug SSH Connection
+        run: |
+          echo "Testing SSH connectivity..."
+          echo "${{ secrets.SSH_HOST }}" | sed 's/./*/g'  # Safely print masked host
+          echo "${{ secrets.SSH_USERNAME }}" | sed 's/./*/g'  # Safely print masked username
+
       - name: Deploy to Server
         uses: appleboy/ssh-action@master
         with:
