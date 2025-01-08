@@ -1,0 +1,41 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [testing, production]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/backend
+            if [ "${{ github.ref }}" == "refs/heads/testing" ]; then
+              git pull origin testing
+              npm install
+              pm2 restart backend --name "backend-test"
+              echo "Deployed to test.daudtravel.com"
+            elif [ "${{ github.ref }}" == "refs/heads/production" ]; then
+              git pull origin production
+              npm install
+              pm2 restart backend --name "backend-prod"
+              echo "Deployed to daudtravel.com"
+            fi
