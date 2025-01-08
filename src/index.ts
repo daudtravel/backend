@@ -34,7 +34,7 @@ const PORT = process.env.PORT || 3001;
     process.exit(1);  
   }
   app.listen(PORT, () => {
-    console.log(`Running on ${PORT}`);
+    console.log(`Running on ${PORT} !`);
   });
 })();
 
