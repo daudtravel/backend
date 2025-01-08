@@ -31,11 +31,13 @@ jobs:
             if [ "${{ github.ref }}" == "refs/heads/testing" ]; then
               git pull origin testing
               npm install
-              pm2 restart backend --name "backend-test"
-              echo "Deployed to test.daudtravel.com"
+              npm run build  # Add TypeScript build step
+              pm2 restart backend-test  # Match your ecosystem.config.js name
+              echo "Deployed to test environment on port 3001"
             elif [ "${{ github.ref }}" == "refs/heads/production" ]; then
               git pull origin production
               npm install
-              pm2 restart backend --name "backend-prod"
-              echo "Deployed to daudtravel.com"
+              npm run build  # Add TypeScript build step
+              pm2 restart backend-prod  # Match your ecosystem.config.js name
+              echo "Deployed to production environment on port 3000"
             fi
