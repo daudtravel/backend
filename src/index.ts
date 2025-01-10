@@ -9,23 +9,17 @@ import path from "path";
 dotenv.config();
 const app = express();
 
-// Define CORS options
 const corsOptions = {
   origin: [
     'https://daudtravel.com', 
     'https://www.daudtravel.com', 
     'https://test.daudtravel.com', 
     'http://localhost:4000',
-    'http://localhost:3000'  // Add your local development frontend URL here for local testing
+    'http://localhost:3000' 
   ],
-  credentials: true,  // Allow cookies or credentials if needed
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  preflightContinue: false,  // Ensures the OPTIONS response is automatically handled
-  optionsSuccessStatus: 204  // Avoid 200 OK status on preflight requests
 };
-
-// Use CORS middleware with the defined options
 app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '50mb' }));
