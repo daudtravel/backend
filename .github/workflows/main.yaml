@@ -1,7 +1,9 @@
-name: Frontend CI/CD Pipeline
+name: CI/CD Pipeline
+
 on:
   push:
     branches: [testing, production]
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -18,35 +20,22 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Test SSH Connection
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            echo "Connection successful"
-            pwd
-
       - name: Deploy to Server
         uses: appleboy/ssh-action@master
-        if: success()
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ~/frontend
+            cd ~/backend
             if [ "${{ github.ref }}" == "refs/heads/testing" ]; then
               git pull origin testing
               npm install
-              npm run build
-              pm2 restart frontend-test
-              echo "Deployed to test environment"
+              pm2 restart backend --name "backend-test"
+              echo "Deployed to test.daudtravel.com"
             elif [ "${{ github.ref }}" == "refs/heads/production" ]; then
               git pull origin production
               npm install
-              npm run build
-              pm2 restart frontend-prod
-              echo "Deployed to production environment"
+              pm2 restart backend --name "backend-prod"
+              echo "Deployed to daudtravel.com"
             fi
