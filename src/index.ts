@@ -15,10 +15,13 @@ const corsOptions = {
     'https://www.daudtravel.com', 
     'https://test.daudtravel.com', 
     'http://localhost:4000',
-    'http://localhost:3000' 
+    'http://localhost:3000'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true, // Add this line
+  preflightContinue: false, // Add this line
+  optionsSuccessStatus: 204 // Add this line
 };
 app.use(cors(corsOptions));
 
