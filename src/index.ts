@@ -13,15 +13,15 @@ const corsOptions = {
   origin: [
     'https://daudtravel.com', 
     'https://www.daudtravel.com', 
-    'https://test.daudtravel.com', 
+    'https://test.daudtravel.com',
     'http://localhost:4000',
     'http://localhost:3000'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true, // Add this line
-  preflightContinue: false, // Add this line
-  optionsSuccessStatus: 204 // Add this line
+  credentials: true,
+  preflightContinue: false, 
+  optionsSuccessStatus: 204 
 };
 app.use(cors(corsOptions));
 
@@ -30,7 +30,7 @@ app.use("/api", router);
 app.use("/api", ...swaggerMiddleware);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 (async () => {
   try {
@@ -40,7 +40,15 @@ const PORT = process.env.PORT || 3001;
     console.error('Error initializing database tables:', error);
     process.exit(1);
   }
-
+  app.use((req, res, next) => {
+    console.log('Request Origin:', req.headers.origin);  // Log the Origin
+    next();
+  });
+  app.use((req, res, next) => {
+    console.log('CORS Options:', corsOptions);  // Log CORS options
+    next();
+  });
+  
   app.listen(PORT, () => {
     console.log(`Running on ${PORT}!`);
   });
