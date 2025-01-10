@@ -1,7 +1,11 @@
 import cors from 'cors';
 
 const corsMiddleware = cors({
-  origin: 'https://daudtravel.com/',  // This is your frontend's URL
+  origin: [
+    'https://daudtravel.com',
+    'https://www.daudtravel.com',
+    'https://test.daudtravel.com'
+  ],  // This is your frontend's URL
   credentials: true,                // Allows cookies to be sent
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // List of allowed HTTP methods
   allowedHeaders: ['Content-Type', 'Authorization'], // Allow headers you want
