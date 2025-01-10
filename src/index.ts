@@ -10,15 +10,7 @@ import path from 'path';
 dotenv.config();
 const app = express();
 
-app.use(cors({
-  origin: [
-    'https://test.daudtravel.com',  // Test frontend
-    'https://daudtravel.com',        // Production frontend
-    'https://www.daudtravel.com'     // www version of production frontend
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(cors());
 app.use(corsMiddleware) 
 app.use(express.json({ limit: '50mb' }));
 app.use("/api", router);
