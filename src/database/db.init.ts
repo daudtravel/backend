@@ -35,6 +35,7 @@ const createTableIfNotExist = async () => {
       password VARCHAR(255) NOT NULL,
       email VARCHAR(100) UNIQUE NOT NULL,
       is_verified BOOLEAN DEFAULT FALSE,
+      admin BOOLEAN DEFAULT false, 
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
