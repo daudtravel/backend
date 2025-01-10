@@ -15,14 +15,22 @@ const corsOptions = {
     'https://www.daudtravel.com', 
     'https://test.daudtravel.com',
     'http://localhost:4000',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    'http://localhost:3001'  // Added this if you're running frontend on 3001
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],  // Added 'Accept'
+  exposedHeaders: ['Content-Type', 'Authorization'],  // Added exposed headers
   credentials: true,
-  preflightContinue: false, 
-  optionsSuccessStatus: 204 
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+  maxAge: 86400  // Add cache for preflight requests - 24 hours
 };
+
+// Enable preflight requests for all routes
+app.options('*', cors(corsOptions));
+
+// Apply CORS middleware
 app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '50mb' }));
@@ -30,7 +38,7 @@ app.use("/api", router);
 app.use("/api", ...swaggerMiddleware);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 (async () => {
   try {
@@ -40,15 +48,7 @@ const PORT = process.env.PORT || 3000;
     console.error('Error initializing database tables:', error);
     process.exit(1);
   }
-  app.use((req, res, next) => {
-    console.log('Request Origin:', req.headers.origin);  // Log the Origin
-    next();
-  });
-  app.use((req, res, next) => {
-    console.log('CORS Options:', corsOptions);  // Log CORS options
-    next();
-  });
-  
+
   app.listen(PORT, () => {
     console.log(`Running on ${PORT}!`);
   });
