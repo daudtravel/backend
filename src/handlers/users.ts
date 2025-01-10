@@ -162,7 +162,8 @@ export const signin = async (request: Request, response: Response): Promise<void
             userId: user.id,
             email: user.email,
             firstname: user.firstname,
-            lastname: user.lastname
+            lastname: user.lastname,
+            admin: user.admin
             
         },
         JWT_SECRET,
