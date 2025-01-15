@@ -16,7 +16,7 @@ const corsOptions = {
     'https://test.daudtravel.com',
     'http://localhost:4000',
     'http://localhost:3000',
-    'http://localhost:3001'  // Added this if you're running frontend on 3001
+    'http://localhost:3001' 
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],  // Added 'Accept'
@@ -24,13 +24,11 @@ const corsOptions = {
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204,
-  maxAge: 86400  // Add cache for preflight requests - 24 hours
+  maxAge: 86400  
 };
 
-// Enable preflight requests for all routes
-app.options('*', cors(corsOptions));
 
-// Apply CORS middleware
+app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '50mb' }));
