@@ -58,8 +58,7 @@ export const getAllTransfers = async (req: Request, res: Response): Promise<void
    
       const query = `SELECT * FROM transfers ORDER BY created_at DESC`;
 
-      const { rows } = await pool.query(query);
-  
+      const { rows } = await pool.query(query);  
       res.status(200).json({
         message: 'All transfers retrieved successfully',
         data: rows,
@@ -71,7 +70,6 @@ export const getAllTransfers = async (req: Request, res: Response): Promise<void
       });
     }
   };
-
 
 
   export const updateTransfer = async (req: Request, res: Response): Promise<void> => {
@@ -134,8 +132,7 @@ export const getAllTransfers = async (req: Request, res: Response): Promise<void
   };
 
 
-
-  export const deleteTransfer = async (req: Request, res: Response): Promise<void> => {
+export const deleteTransfer = async (req: Request, res: Response): Promise<void> => {
     try {
 
       const { id } = req.params;
