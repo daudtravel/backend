@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from 'uuid';
 import pool from "../config/sql";
-import { CreateTransfersSchema } from "../schemas/transfers/CreateTransfersSchema";
-
+import { CreateTransfersSchema } from "../schemas/transfers/createaTransferSchema";
+ 
+ 
 
 export const createTransfer = async (req: Request, res: Response): Promise<void> => {
     try {
