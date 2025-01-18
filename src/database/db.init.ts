@@ -26,7 +26,7 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
   }
 };
 
-const createTableIfNotExist = async () => {
+const createUsersTableIfNotExist = async () => {
   const userQuery = `
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY,
@@ -35,6 +35,7 @@ const createTableIfNotExist = async () => {
       password VARCHAR(255) NOT NULL,
       email VARCHAR(100) UNIQUE NOT NULL,
       is_verified BOOLEAN DEFAULT FALSE,
+      admin BOOLEAN DEFAULT false, 
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
@@ -64,8 +65,33 @@ const createEmailVerificationTableIfNotExist = async () => {
   }
 };
 
+
+
+const createTransfersTableIfNotExist = async () => {
+  const query = `
+    CREATE TABLE IF NOT EXISTS transfers (
+      id UUID PRIMARY KEY,
+      localizations JSONB NOT NULL,
+      total_price INT NOT NULL,
+      reservation_price INT NOT NULL,
+      date DATE NOT NULL, 
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  try {
+    await pool.query(query);
+    console.log('Trasnfers  table checked/created successfully');
+  } catch (error) {
+    console.error('Error creating transfers table:', error);
+  }
+};
+
+
+
 export const initDatabase = async () => {
-  await createTableIfNotExist();
+  await createUsersTableIfNotExist();
   await createEmailVerificationTableIfNotExist();
   await createToursTableIfNotExist();
+  await createTransfersTableIfNotExist()
 };

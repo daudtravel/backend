@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Buildup Investment
+  title: Daud travel test
   description: API for managing company names
   version: 0.1.9
 
