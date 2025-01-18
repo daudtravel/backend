@@ -55,23 +55,31 @@ import pool from "../config/sql";
 
 
 export const getAllTransfers = async (req: Request, res: Response): Promise<void> => {
-    try {
-   
-      const query = `SELECT * FROM transfers ORDER BY created_at DESC`;
-
-      const { rows } = await pool.query(query);  
+  try {
+    const query = `SELECT * FROM transfers ORDER BY created_at DESC`;
+    const { rows } = await pool.query(query);
+    
+    if (!rows || rows.length === 0) {
       res.status(200).json({
-        message: 'All transfers retrieved successfully',
-        data: rows,
+        message: 'No transfers found',
+        data: []
       });
-    } catch (error) {
-      console.error('Error fetching transfers:', error);
-      res.status(500).json({
-        message: 'Internal server error while fetching transfers',
-      });
+      return;
     }
-  };
 
+    res.status(200).json({
+      message: 'All transfers retrieved successfully',
+      data: rows,
+    });
+  } catch (error) {
+    console.error('Error fetching transfers:', error);
+    // More detailed error response
+    res.status(500).json({
+      message: 'Internal server error while fetching transfers',
+      
+    });
+  }
+};
 
 //   export const updateTransfer = async (req: Request, res: Response): Promise<void> => {
 //     try {
