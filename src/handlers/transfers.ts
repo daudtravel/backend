@@ -76,7 +76,7 @@ export const getAllTransfers = async (req: Request, res: Response): Promise<void
     // More detailed error response
     res.status(500).json({
       message: 'Internal server error while fetching transfers',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      
     });
   }
 };
