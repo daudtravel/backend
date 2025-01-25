@@ -11,7 +11,7 @@ const TranslationSchema = z.object({
 export const CreateTransfersSchema = z.object({
   localizations: z.array(TranslationSchema).min(1, "At least one localization is required"),
   total_price: z.number().positive("Total price must be positive"),
-  date: z.date(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"), 
   reservation_price: z.number().positive("Reservation price must be positive"),
 
 });

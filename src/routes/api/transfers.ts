@@ -1,12 +1,15 @@
 import { Router } from "express";
-import {  getAllTransfers  } from "../../handlers/transfers";
+import {  createTransfer, getAllTransfers, getTransferById, updateTransfer  } from "../../handlers/transfers";
  
 const transfersRouter = Router();
  
 
-// transfersRouter.post("/create_transfers",  createTransfer);
-transfersRouter.get("/all_transfers",  getAllTransfers);
-// transfersRouter.put("/update_transfer",  updateTransfer);
+transfersRouter.post("/create_transfers",  createTransfer);
+transfersRouter.get("/transfers",  getAllTransfers);
+transfersRouter.get("/transfers/:id",  getTransferById);
+transfersRouter.put("/update_transfers",  updateTransfer);
+transfersRouter.delete("/transfers/:id",  getTransferById);
+
  
 
 
