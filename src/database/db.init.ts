@@ -65,8 +65,6 @@ const createEmailVerificationTableIfNotExist = async () => {
   }
 };
 
-
-
 const createTransfersTableIfNotExist = async () => {
   const query = `
     CREATE TABLE IF NOT EXISTS transfers (

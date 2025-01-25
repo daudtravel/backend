@@ -7,7 +7,12 @@ import { CreateTransfersSchema } from "../schemas/transfers/createaTransferSchem
 
 export const createTransfer = async (req: Request, res: Response): Promise<void> => {
     try {
-        const result = CreateTransfersSchema.safeParse(req.body);
+      const requestData = {
+        ...req.body,
+        date: new Date(req.body.date).toISOString().split('T')[0]  
+      };
+  
+      const result = CreateTransfersSchema.safeParse(requestData);
 
         if (!result.success) {
             res.status(400).json({
@@ -76,6 +81,41 @@ export const getAllTransfers = async (req: Request, res: Response): Promise<void
     res.status(500).json({
       message: 'Internal server error while fetching transfers',
       
+    });
+  }
+};
+
+
+export const getTransferById = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  if (!id) {
+    res.status(400).json({
+      message: 'Transfer ID is required',
+    });
+    return;
+  }
+
+  try {
+    const query = `SELECT * FROM transfers WHERE id = $1`;
+    const { rows } = await pool.query(query, [id]);
+
+    if (!rows || rows.length === 0) {
+      res.status(404).json({
+        message: `No transfer found with ID: ${id}`,
+        data: null,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      message: `Transfer with ID: ${id} retrieved successfully`,
+      data: rows[0],
+    });
+  } catch (error) {
+    console.error('Error fetching transfer by ID:', error);
+    res.status(500).json({
+      message: 'Internal server error while fetching the transfer',
     });
   }
 };
