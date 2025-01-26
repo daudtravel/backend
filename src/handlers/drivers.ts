@@ -65,10 +65,9 @@ export const getAllDrivers = async (req: Request, res: Response): Promise<void> 
                 id, 
                 firstname, 
                 lastname, 
-                image,
-                created_at
+                image
             FROM drivers
-            ORDER BY created_at DESC;
+            
         `;
 
         const { rows: drivers } = await pool.query(query);

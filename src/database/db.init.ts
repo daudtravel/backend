@@ -88,18 +88,18 @@ const createTransfersTableIfNotExist = async () => {
 
 const createDriversTableIfNoExist = async () => {
   const query = `
-    CREATE TABLE IF NOT EXISTS transfers (
+    CREATE TABLE IF NOT EXISTS drivers (
       id UUID PRIMARY KEY,
       firstname VARCHAR(255) NOT NULL,
       lastname VARCHAR(255) NOT NULL,
-      image TEXT,
+      image TEXT
        
     );
   `;
 
   try {
     await pool.query(query);
-    console.log('Trasnfers  table checked/created successfully');
+    console.log('Drivers  table checked/created successfully');
   } catch (error) {
     console.error('Error creating transfers table:', error);
   }

@@ -8,7 +8,7 @@ transfersRouter.post("/create_transfers",  createTransfer);
 transfersRouter.get("/transfers",  getAllTransfers);
 transfersRouter.get("/transfers/:id",  getTransferById);
 transfersRouter.put("/update_transfers/:id",  updateTransfer);
-transfersRouter.delete("/transfers/:id",  deleteTransfer);
+transfersRouter.delete("/delete_transfer/:id",  deleteTransfer);
 
  
 
