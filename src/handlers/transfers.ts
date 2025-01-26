@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { v4 as uuidv4 } from 'uuid';
 import pool from "../config/sql";
 import { CreateTransfersSchema } from "../schemas/transfers/createaTransferSchema";
+import { EditTransferSchema } from "../schemas/transfers/editTrasnferSchema";
  
  
 
@@ -120,7 +121,7 @@ export const getTransferById = async (req: Request, res: Response): Promise<void
 
 export const updateTransfer = async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = CreateTransfersSchema.safeParse(req.body);
+      const result = EditTransferSchema.safeParse(req.body);
   
       if (!result.success) {
         res.status(400).json({
@@ -180,6 +181,7 @@ export const deleteTransfer = async (req: Request, res: Response): Promise<void>
     try {
 
       const { id } = req.params;
+      console.log(id)
       const deleteQuery = `
         DELETE FROM transfers
         WHERE id = $1
