@@ -2,7 +2,7 @@ import pool from "../config/sql";
 import { v4 as uuidv4 } from 'uuid';
 import { saveBase64Images } from "../utils/base64/saveBase64";
 import { Request, Response } from "express";
-import { CreateDriverSchema } from "../schemas/drivers/createDriverSchema";
+import { CreateDriverSchema } from "../schemas/driver/createDriverSchema";
 ;
 
 
