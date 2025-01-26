@@ -58,7 +58,6 @@ export const createTransfer = async (req: Request, res: Response): Promise<void>
     }
   };
 
-
 export const getAllTransfers = async (req: Request, res: Response): Promise<void> => {
   try {
     const query = `SELECT * FROM transfers ORDER BY created_at DESC`;
@@ -84,7 +83,6 @@ export const getAllTransfers = async (req: Request, res: Response): Promise<void
     });
   }
 };
-
 
 export const getTransferById = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
@@ -120,7 +118,7 @@ export const getTransferById = async (req: Request, res: Response): Promise<void
   }
 };
 
-  export const updateTransfer = async (req: Request, res: Response): Promise<void> => {
+export const updateTransfer = async (req: Request, res: Response): Promise<void> => {
     try {
       const result = CreateTransfersSchema.safeParse(req.body);
   
@@ -134,19 +132,18 @@ export const getTransferById = async (req: Request, res: Response): Promise<void
   
       const { id } = req.params;
       const { localizations, date, total_price, reservation_price } = result.data;
-  
+    
  
       const updateQuery = `
-        UPDATE transfers
-        SET
-          localizations = $1,
-          date = $2,
-          total_price = $3,
-          reservation_price = $4,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = $5
-        RETURNING *;
-      `;
+      UPDATE transfers
+      SET
+        localizations = $1,
+        date = $2,
+        total_price = $3,
+        reservation_price = $4
+      WHERE id = $5
+      RETURNING *;
+    `;
   
       const values = [
         JSON.stringify(localizations),
@@ -178,7 +175,6 @@ export const getTransferById = async (req: Request, res: Response): Promise<void
       });
     }
   };
-
 
 export const deleteTransfer = async (req: Request, res: Response): Promise<void> => {
     try {

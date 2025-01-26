@@ -86,10 +86,31 @@ const createTransfersTableIfNotExist = async () => {
 };
 
 
+const createDriversTableIfNoExist = async () => {
+  const query = `
+    CREATE TABLE IF NOT EXISTS transfers (
+      id UUID PRIMARY KEY,
+      firstname VARCHAR(255) NOT NULL,
+      lastname VARCHAR(255) NOT NULL,
+      image TEXT,
+       
+    );
+  `;
+
+  try {
+    await pool.query(query);
+    console.log('Trasnfers  table checked/created successfully');
+  } catch (error) {
+    console.error('Error creating transfers table:', error);
+  }
+};
+
+
 
 export const initDatabase = async () => {
   await createUsersTableIfNotExist();
   await createEmailVerificationTableIfNotExist();
   await createToursTableIfNotExist();
-  await createTransfersTableIfNotExist()
+  await createTransfersTableIfNotExist();
+  await createDriversTableIfNoExist()
 };

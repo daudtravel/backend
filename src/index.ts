@@ -19,8 +19,8 @@ const corsOptions = {
     'http://localhost:3001' 
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],  // Added 'Accept'
-  exposedHeaders: ['Content-Type', 'Authorization'],  // Added exposed headers
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'], 
+  exposedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204,
