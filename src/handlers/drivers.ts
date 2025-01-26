@@ -1,5 +1,5 @@
 import pool from "../config/sql";
-import { AddDriverScchema } from "../schemas/drivers/AddDriverSchema";
+import { AddDriverSchema } from "../schemas/drivers/AddDriverSchema";
 import { v4 as uuidv4 } from 'uuid';
 import { saveBase64Images } from "../utils/base64/saveBase64";
 import { Request, Response } from "express";
@@ -9,7 +9,7 @@ import { Request, Response } from "express";
  
 export const addDriver = async (req: Request, res: Response): Promise<void> => {
     try {
-        const result = AddDriverScchema.safeParse(req.body);
+        const result = AddDriverSchema.safeParse(req.body);
 
         if (!result.success) {
             res.status(400).json({
