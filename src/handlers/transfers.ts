@@ -3,8 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from "../config/sql";
 import { CreateTransfersSchema } from "../schemas/transfers/createaTransferSchema";
 import { EditTransferSchema } from "../schemas/transfers/editTrasnferSchema";
+import { z } from "zod";
  
- 
+const QueryParamsSchema = z.object({
+  locale: z.string().optional(),
+});
+
 
 export const createTransfer = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -59,31 +63,76 @@ export const createTransfer = async (req: Request, res: Response): Promise<void>
     }
   };
 
-export const getAllTransfers = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const query = `SELECT * FROM transfers ORDER BY created_at DESC`;
-    const { rows } = await pool.query(query);
-    
-    if (!rows || rows.length === 0) {
+  export const getAllTransfers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      // Validate query parameters
+      const result = QueryParamsSchema.safeParse(req.query);
+      if (!result.success) {
+        res.status(400).json({
+          message: 'Invalid query parameters',
+          errors: result.error.format(),
+        });
+        return;
+      }
+  
+      const { locale } = result.data;
+  
+      let query = `
+        SELECT 
+          t.*,
+          CASE 
+            WHEN $1::text IS NOT NULL THEN (
+              SELECT jsonb_agg(loc)
+              FROM jsonb_array_elements(t.localizations) loc
+              WHERE loc->>'locale' = $1
+            )
+            ELSE t.localizations
+          END as filtered_localizations
+        FROM transfers t
+      `;
+  
+      const queryParams: any[] = [locale || null];
+  
+      // Add locale filter if specified
+      if (locale) {
+        query += `
+          WHERE EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(t.localizations) loc
+            WHERE loc->>'locale' = $1
+          )
+        `;
+      }
+  
+      const { rows } = await pool.query(query, queryParams);
+  
+      if (rows.length === 0) {
+        res.status(200).json({
+          message: 'No transfers found',
+          data: []
+        });
+        return;
+      }
+  
+      // Transform the response data
+      const transfers = rows.map(transfer => ({
+        ...transfer,
+        localizations: transfer.filtered_localizations || [],
+        filtered_localizations: undefined
+      }));
+  
       res.status(200).json({
-        message: 'No transfers found',
-        data: []
+        message: 'Transfers retrieved successfully',
+        data: transfers
       });
-      return;
+  
+    } catch (error) {
+      console.error('Error fetching transfers:', error);
+      res.status(500).json({
+        message: 'Internal server error while fetching transfers',
+      });
     }
-
-    res.status(200).json({
-      message: 'All transfers retrieved successfully',
-      data: rows,
-    });
-  } catch (error) {
-    console.error('Error fetching transfers:', error);
-    res.status(500).json({
-      message: 'Internal server error while fetching transfers',
-      
-    });
-  }
-};
+  };
 
 export const getTransferById = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
