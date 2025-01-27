@@ -4,10 +4,6 @@ import { saveBase64Images } from "../utils/base64/saveBase64";
 import { Request, Response } from "express";
 import CreateDriversSchema from "../schemas/transfers/createDriversSchema";
  
-
-
-
-
  
 export const addDriver = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -56,7 +52,6 @@ export const addDriver = async (req: Request, res: Response): Promise<void> => {
         });
     }
 };
-
 
 export const getAllDrivers = async (req: Request, res: Response): Promise<void> => {
     try {
