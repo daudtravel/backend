@@ -28,29 +28,16 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { localizations, duration, total_price, reservation_price, image, gallery = [] } = result.data;
-
-    const names = localizations.map(item => item.name);
-    const checkQuery = `
-      SELECT EXISTS (
-        SELECT 1 FROM tours
-        WHERE localizations @> ANY (
-          SELECT jsonb_build_array(
-            jsonb_build_object('name', name)
-          )::jsonb
-          FROM unnest($1::text[]) AS name
-        )
-      );
-    `;
-
-    const { rows: [{ exists: nameExists }] } = await pool.query(checkQuery, [names]);
-
-    if (nameExists) {
-      res.status(409).json({
-        message: 'Tour with one of these names already exists',
-      });
-      return;
-    }
+    const {
+      localizations,
+      duration,
+      start_time,
+      end_time,
+      total_price,
+      reservation_price,
+      image,
+      gallery = []
+    } = result.data;
 
     const tourId = uuidv4();
     const { mainImageUrl, galleryUrls } = await saveBase64Images(image, gallery);
@@ -59,13 +46,15 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       INSERT INTO tours (
         id, 
         localizations, 
-        duration, 
+        duration,
+        start_time,
+        end_time,
         total_price, 
         reservation_price, 
         image,
         gallery
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *;
     `;
 
@@ -73,6 +62,8 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       tourId,
       JSON.stringify(localizations),
       duration,
+      start_time,
+      end_time,
       total_price,
       reservation_price,
       mainImageUrl,
@@ -114,7 +105,10 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         t.total_price,
         t.reservation_price,
         t.duration,
+        t.start_time,
+        t.end_time,
         t.image,
+        t.gallery,
         t.created_at,
         t.updated_at,
         COUNT(*) OVER() as total_count,
@@ -131,7 +125,6 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
 
     const queryParams: any[] = [locale || null];
 
-    
     if (locale) {
       query += `
         WHERE EXISTS (
@@ -142,7 +135,6 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
       `;
     }
 
-     
     query += `
       ORDER BY ${sortBy} ${sortOrder}
       LIMIT $${queryParams.length + 1}
@@ -193,13 +185,10 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
   } catch (error) {
     console.error('Error fetching tours:', error);
     res.status(500).json({
-      message: 'Internal server error while fetching tours',
-  
+      message: 'Internal server error while fetching tours'
     });
   }
 };
-
-
 
 export const getPublicTours = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -212,7 +201,7 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { page, limit, sortBy, sortOrder, locale, minPrice, maxPrice, destination } = result.data;
+    const { page, limit, sortBy, sortOrder, locale, minPrice, maxPrice } = result.data;
     const offset = (page - 1) * limit;
 
     let query = `
@@ -221,7 +210,10 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
         t.total_price,
         t.reservation_price,
         t.duration,
+        t.start_time,
+        t.end_time,
         t.image,
+        t.gallery,
         t.created_at,
         t.updated_at,
         COUNT(*) OVER() as total_count,
@@ -245,17 +237,6 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
           SELECT 1
           FROM jsonb_array_elements(t.localizations) loc
           WHERE loc->>'locale' = $1
-        )
-      `;
-    }
-
-    if (destination) {
-      queryParams.push(destination);
-      query += `
-        AND EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(t.localizations) loc
-          WHERE loc->>'destination' = $${queryParams.length}
         )
       `;
     }
@@ -324,7 +305,6 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
   }
 };
 
-
 export const getTourById = async (req: Request, res: Response): Promise<void> => {
   try {
     const paramsResult = ParamsSchema.safeParse(req.params);
@@ -336,7 +316,6 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-  
     const queryResult = QuerySchema.safeParse(req.query);
     if (!queryResult.success) {
       res.status(400).json({
@@ -355,6 +334,8 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
         t.total_price,
         t.reservation_price,
         t.duration,
+        t.start_time,
+        t.end_time,
         t.image,
         t.public,
         t.gallery,
@@ -387,8 +368,8 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       localizations: rows[0].localizations || [],
       translations: (rows[0].localizations || []).reduce((acc: any, loc: any) => {
         acc[loc.locale] = {
-          name: loc.name,
-          destination: loc.destination,
+          start_location: loc.start_location,
+          next_location: loc.next_location,
           description: loc.description
         };
         return acc;
@@ -436,9 +417,11 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     const { 
       localizations, 
       duration, 
+      start_time,
+      end_time,
       total_price, 
       reservation_price, 
-      public: isPublic, // renamed to avoid keyword conflict
+      public: isPublic,
       image = null, 
       gallery = null,
       deleteImages = null
@@ -494,9 +477,11 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     let updateFields = [
       'localizations = $2',
       'duration = $3',
-      'total_price = $4',
-      'reservation_price = $5',
-      'public = $6', // Added public field
+      'start_time = $4',
+      'end_time = $5',
+      'total_price = $6',
+      'reservation_price = $7',
+      'public = $8',
       'updated_at = NOW()'
     ];
     
@@ -504,9 +489,11 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       id,
       JSON.stringify(localizations),
       duration,
+      start_time,
+      end_time,
       total_price,
       reservation_price,
-      isPublic, // Added public value
+      isPublic,
     ];
 
     // Only include image in update if it was provided
