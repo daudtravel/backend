@@ -431,16 +431,17 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-
     let mainImageUrl = tour.image;
     let updatedGallery = tour.gallery || [];
 
+    // Handle deleted images
     if (deleteImages !== null && deleteImages.length > 0) {
       updatedGallery = updatedGallery.filter(
         (imageUrl: string) => !deleteImages.includes(imageUrl)
       );
     }
 
+    // Process new image and gallery uploads
     if (image !== null || gallery !== null) {
       let galleryUrls: string[] = [];
       
@@ -484,7 +485,6 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       values.push(mainImageUrl);
     }
 
-
     if (gallery !== null || deleteImages !== null) {
       updateFields.push(`gallery = $${values.length + 1}`);
       values.push(updatedGallery);
@@ -511,7 +511,6 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     });
   }
 };
-
 
 export const deleteTour = async (req: Request, res: Response): Promise<void> => {
   try {
