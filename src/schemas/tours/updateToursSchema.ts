@@ -12,8 +12,8 @@ export const UpdateToursSchema = z.object({
   duration: z.string().optional(),
   total_price: z.number().positive("Total price must be positive"),
   reservation_price: z.number().positive("Reservation price must be positive"),
-  image: z.string().regex(/^data:image\/[a-zA-Z]+;base64,/).nullable(),
-  gallery: z.array(z.string().regex(/^data:image\/[a-zA-Z]+;base64,/)).optional().nullable(),
+  image: z.string().nullable(),
+  gallery: z.array(z.string()).optional().nullable(),
   deleteImages: z.array(z.string()).optional().nullable(),
   public: z.boolean().default(false)
 });
