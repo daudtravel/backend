@@ -31,8 +31,6 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
     const {
       localizations,
       duration,
-      start_time,
-      end_time,
       total_price,
       reservation_price,
       image,
@@ -47,14 +45,12 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
         id, 
         localizations, 
         duration,
-        start_time,
-        end_time,
         total_price, 
         reservation_price, 
         image,
         gallery
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *;
     `;
 
@@ -62,8 +58,6 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       tourId,
       JSON.stringify(localizations),
       duration,
-      start_time,
-      end_time,
       total_price,
       reservation_price,
       mainImageUrl,
@@ -105,8 +99,6 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         t.total_price,
         t.reservation_price,
         t.duration,
-        t.start_time,
-        t.end_time,
         t.image,
         t.gallery,
         t.created_at,
@@ -190,6 +182,7 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+
 export const getPublicTours = async (req: Request, res: Response): Promise<void> => {
   try {
     const result = QueryParamsSchema.safeParse(req.query);
@@ -210,8 +203,6 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
         t.total_price,
         t.reservation_price,
         t.duration,
-        t.start_time,
-        t.end_time,
         t.image,
         t.gallery,
         t.created_at,
@@ -334,8 +325,6 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
         t.total_price,
         t.reservation_price,
         t.duration,
-        t.start_time,
-        t.end_time,
         t.image,
         t.public,
         t.gallery,
@@ -376,6 +365,10 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       }, {})
     };
 
+    // Remove start_time and end_time from the tour object
+    delete tour.start_time;
+    delete tour.end_time;
+
     res.status(200).json({
       message: 'Tour retrieved successfully',
       data: {
@@ -390,7 +383,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       error: process.env.NODE_ENV === 'development' ? error : undefined
     });
   }
-};
+}
 
 export const updateTour = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -417,8 +410,6 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     const { 
       localizations, 
       duration, 
-      start_time,
-      end_time,
       total_price, 
       reservation_price, 
       public: isPublic,
@@ -427,7 +418,6 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       deleteImages = null
     } = result.data;
 
-    // Check if the tour exists and get current data
     const checkQuery = `
       SELECT gallery, image 
       FROM tours 
@@ -443,7 +433,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Process images based on what was provided
+
     let mainImageUrl = tour.image;
     let updatedGallery = tour.gallery || [];
 
@@ -473,15 +463,12 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       }
     }
 
-    // Dynamically build the update query and values
     let updateFields = [
       'localizations = $2',
       'duration = $3',
-      'start_time = $4',
-      'end_time = $5',
-      'total_price = $6',
-      'reservation_price = $7',
-      'public = $8',
+      'total_price = $4',
+      'reservation_price = $5',
+      'public = $6',
       'updated_at = NOW()'
     ];
     
@@ -489,20 +476,17 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       id,
       JSON.stringify(localizations),
       duration,
-      start_time,
-      end_time,
       total_price,
       reservation_price,
       isPublic,
     ];
 
-    // Only include image in update if it was provided
     if (image !== null) {
       updateFields.push(`image = $${values.length + 1}`);
       values.push(mainImageUrl);
     }
 
-    // Include gallery in update if either new gallery was provided or images were deleted
+
     if (gallery !== null || deleteImages !== null) {
       updateFields.push(`gallery = $${values.length + 1}`);
       values.push(updatedGallery);
@@ -529,7 +513,8 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     });
   }
 };
- 
+
+
 export const deleteTour = async (req: Request, res: Response): Promise<void> => {
   try {
    

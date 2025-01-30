@@ -22,8 +22,6 @@ export interface Tour {
     description?: string;
   }[];
   duration?: string;
-  start_time?: string;
-  end_time?: string;
   total_price: number;
   reservation_price: number;
   public: boolean;
