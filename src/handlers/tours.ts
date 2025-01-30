@@ -512,6 +512,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+
 export const deleteTour = async (req: Request, res: Response): Promise<void> => {
   try {
    
