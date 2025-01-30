@@ -9,8 +9,6 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
       reservation_price INT NOT NULL,
       localizations JSONB NOT NULL,
       duration VARCHAR(255) NOT NULL,
-      start_time VARCHAR(255) NOT NULL,
-      end_time VARCHAR(255) NOT NULL,
       public BOOLEAN DEFAULT false, 
       image TEXT,
       gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
