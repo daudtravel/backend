@@ -365,9 +365,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       }, {})
     };
 
-    // Remove start_time and end_time from the tour object
-    delete tour.start_time;
-    delete tour.end_time;
+     
 
     res.status(200).json({
       message: 'Tour retrieved successfully',
