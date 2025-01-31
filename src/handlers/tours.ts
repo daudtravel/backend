@@ -19,8 +19,13 @@ const ParamsSchema = z.object({
 
 export const createTour = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Add debug logging to see the incoming data
+    console.log('Incoming request body:', JSON.stringify(req.body, null, 2));
+    
     const result = CreateToursSchema.safeParse(req.body);
+    
     if (!result.success) {
+      console.log('Validation errors:', result.error.format());
       res.status(400).json({
         message: 'Invalid input data',
         errors: result.error.format(),
@@ -28,25 +33,18 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const {
-      localizations,
-      duration,
-      total_price,
-      reservation_price,
-      image,
-      gallery = []
-    } = result.data;
+    const { localizations, duration, total_price, reservation_price, image, gallery = [] } = result.data;
 
     const tourId = uuidv4();
     const { mainImageUrl, galleryUrls } = await saveBase64Images(image, gallery);
-    
+
     const createQuery = `
       INSERT INTO tours (
-        id, 
-        localizations, 
+        id,
+        localizations,
         duration,
-        total_price, 
-        reservation_price, 
+        total_price,
+        reservation_price,
         image,
         gallery
       )
@@ -65,15 +63,14 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
     ];
 
     const { rows: [createdTour] } = await pool.query(createQuery, values);
-    
+
     res.status(201).json({
       message: 'Tour created successfully',
       data: createdTour
     });
-
   } catch (error) {
     console.error('Error creating tour:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Internal server error while creating tour'
     });
   }
