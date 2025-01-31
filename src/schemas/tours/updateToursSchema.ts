@@ -3,7 +3,7 @@ import { z } from "zod";
 const TranslationSchema = z.object({
   locale: z.string().min(1, "Locale is required"),
   start_location: z.string().optional(),
-  next_location: z.array(z.string()).optional(),
+  next_location: z.array(z.string()).optional().default([]),  
   description: z.string().optional()
 });
 
