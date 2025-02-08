@@ -10,7 +10,7 @@ const TranslationSchema = z.object({
 
 const PriceSchema = z.object({
   total_price: z.number().optional(),
-  reservation_price: z.number().optional(),
+  reservation_price: z.number().optional()
 });
 
 
