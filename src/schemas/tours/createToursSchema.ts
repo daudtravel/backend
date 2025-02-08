@@ -9,8 +9,8 @@ const TranslationSchema = z.object({
 
 
 const PriceSchema = z.object({
-  total_price: z.number().positive("Total price must be positive"),
-  reservation_price: z.number().positive("Reservation price must be positive")
+  total_price: z.number().optional(),
+  reservation_price: z.number().optional(),
 });
 
 
