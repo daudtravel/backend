@@ -3,19 +3,18 @@ import pool from '../config/sql';
 
 export const createToursTableIfNotExist = async (): Promise<void> => {
   const toursQuery = `
-    CREATE TABLE IF NOT EXISTS tours (
-      id UUID PRIMARY KEY,
-      total_price INT NOT NULL,
-      reservation_price INT NOT NULL,
-      localizations JSONB NOT NULL,
-      duration VARCHAR(255) NOT NULL,
-      public BOOLEAN DEFAULT false, 
-      image TEXT,
-      gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
+  CREATE TABLE IF NOT EXISTS tours (
+    id UUID PRIMARY KEY,
+    prices JSONB NOT NULL,
+    localizations JSONB NOT NULL,
+    duration VARCHAR(255) NOT NULL,
+    public BOOLEAN DEFAULT false,
+    image TEXT,
+    gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  );
+`;
   
   try {
     await pool.query(toursQuery);

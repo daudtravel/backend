@@ -19,9 +19,6 @@ const ParamsSchema = z.object({
 
 export const createTour = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Add debug logging to see the incoming data
-    console.log('Incoming request body:', JSON.stringify(req.body, null, 2));
-    
     const result = CreateToursSchema.safeParse(req.body);
     
     if (!result.success) {
@@ -33,7 +30,24 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { localizations, duration, total_price, reservation_price, image, gallery = [] } = result.data;
+    const { localizations, duration, prices, image, gallery = [] } = result.data;
+
+   
+    const validatePrices = (prices: any): boolean => {
+      const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
+      return months.every(month => 
+        prices[month] && 
+        typeof prices[month].total_price === 'number' && 
+        typeof prices[month].reservation_price === 'number'
+      );
+    };
+
+    if (!validatePrices(prices)) {
+      res.status(400).json({
+        message: 'Invalid prices structure. Must include total_price and reservation_price for months 1-12'
+      });
+      return;
+    }
 
     const tourId = uuidv4();
     const { mainImageUrl, galleryUrls } = await saveBase64Images(image, gallery);
@@ -43,12 +57,11 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
         id,
         localizations,
         duration,
-        total_price,
-        reservation_price,
+        prices,
         image,
         gallery
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *;
     `;
 
@@ -56,8 +69,7 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       tourId,
       JSON.stringify(localizations),
       duration,
-      total_price,
-      reservation_price,
+      JSON.stringify(prices),
       mainImageUrl,
       galleryUrls,
     ];
@@ -78,23 +90,13 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
 
 export const getAllTours = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = QueryParamsSchema.safeParse(req.query);
-    if (!result.success) {
-      res.status(400).json({
-        message: 'Invalid query parameters',
-        errors: result.error.format(),
-      });
-      return;
-    }
-
-    const { page, limit, sortBy, sortOrder, locale } = result.data;
-    const offset = (page - 1) * limit;
+    const { page = 1, limit = 10, locale } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
 
     let query = `
       SELECT 
         t.id,
-        t.total_price,
-        t.reservation_price,
+        t.prices,
         t.duration,
         t.image,
         t.gallery,
@@ -124,12 +126,13 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
       `;
     }
 
+    // Simple sort by updated_at
     query += `
-      ORDER BY ${sortBy} ${sortOrder}
+      ORDER BY updated_at DESC
       LIMIT $${queryParams.length + 1}
       OFFSET $${queryParams.length + 2}
     `;
-    queryParams.push(limit, offset);
+    queryParams.push(Number(limit), offset);
 
     const { rows } = await pool.query(query, queryParams);
 
@@ -140,8 +143,8 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
           tours: [],
           pagination: {
             total: 0,
-            page,
-            limit,
+            page: Number(page),
+            limit: Number(limit),
             totalPages: 0
           }
         }
@@ -150,13 +153,23 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
     }
 
     const totalCount = parseInt(rows[0].total_count);
-    const totalPages = Math.ceil(totalCount / limit);
+    const totalPages = Math.ceil(totalCount / Number(limit));
 
-    const tours = rows.map(tour => ({
-      ...tour,
-      localizations: tour.localizations || [],
-      total_count: undefined
-    }));
+    const tours = rows.map(tour => {
+      const currentMonth = (new Date().getMonth() + 1).toString();
+      const currentPrices = tour.prices[currentMonth] || {
+        total_price: 0,
+        reservation_price: 0
+      };
+
+      return {
+        ...tour,
+        total_price: currentPrices.total_price,
+        reservation_price: currentPrices.reservation_price,
+        localizations: tour.localizations || [],
+        total_count: undefined
+      };
+    });
 
     res.status(200).json({
       message: 'Tours retrieved successfully',
@@ -164,8 +177,8 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         tours,
         pagination: {
           total: totalCount,
-          page,
-          limit,
+          page: Number(page),
+          limit: Number(limit),
           totalPages
         }
       }
@@ -182,23 +195,14 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
 
 export const getPublicTours = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = QueryParamsSchema.safeParse(req.query);
-    if (!result.success) {
-      res.status(400).json({
-        message: "Invalid query parameters",
-        errors: result.error.format(),
-      });
-      return;
-    }
-
-    const { page, limit, sortBy, sortOrder, locale, minPrice, maxPrice } = result.data;
-    const offset = (page - 1) * limit;
+    const { page = 1, limit = 10, locale, minPrice, maxPrice } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+    const currentMonth = (new Date().getMonth() + 1).toString();
 
     let query = `
       SELECT 
         t.id,
-        t.total_price,
-        t.reservation_price,
+        t.prices,
         t.duration,
         t.image,
         t.gallery,
@@ -229,22 +233,28 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
       `;
     }
 
+
     if (minPrice !== undefined) {
       queryParams.push(minPrice);
-      query += ` AND t.total_price >= $${queryParams.length}`;
+      query += `
+        AND (prices->>'${currentMonth}')::jsonb->>'total_price'::numeric >= $${queryParams.length}
+      `;
     }
 
     if (maxPrice !== undefined) {
       queryParams.push(maxPrice);
-      query += ` AND t.total_price <= $${queryParams.length}`;
+      query += `
+        AND (prices->>'${currentMonth}')::jsonb->>'total_price'::numeric <= $${queryParams.length}
+      `;
     }
 
+
     query += `
-      ORDER BY ${sortBy} ${sortOrder}
+      ORDER BY updated_at DESC
       LIMIT $${queryParams.length + 1}
       OFFSET $${queryParams.length + 2}
     `;
-    queryParams.push(limit, offset);
+    queryParams.push(Number(limit), offset);
 
     const { rows } = await pool.query(query, queryParams);
 
@@ -255,8 +265,8 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
           tours: [],
           pagination: {
             total: 0,
-            page,
-            limit,
+            page: Number(page),
+            limit: Number(limit),
             totalPages: 0,
           },
         },
@@ -265,13 +275,23 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
     }
 
     const totalCount = parseInt(rows[0].total_count);
-    const totalPages = Math.ceil(totalCount / limit);
+    const totalPages = Math.ceil(totalCount / Number(limit));
 
-    const tours = rows.map((tour) => ({
-      ...tour,
-      localizations: tour.localizations || [],
-      total_count: undefined,
-    }));
+  
+    const tours = rows.map((tour) => {
+      const currentPrices = tour.prices[currentMonth] || {
+        total_price: 0,
+        reservation_price: 0
+      };
+
+      return {
+        ...tour,
+        total_price: currentPrices.total_price,
+        reservation_price: currentPrices.reservation_price,
+        localizations: tour.localizations || [],
+        total_count: undefined
+      };
+    });
 
     res.status(200).json({
       message: "Tours retrieved successfully",
@@ -279,8 +299,8 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
         tours,
         pagination: {
           total: totalCount,
-          page,
-          limit,
+          page: Number(page),
+          limit: Number(limit),
           totalPages,
         },
       },
@@ -315,12 +335,12 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
 
     const { id } = paramsResult.data;
     const { locale } = queryResult.data;
+    const currentMonth = (new Date().getMonth() + 1).toString();
 
     let query = `
       SELECT 
         t.id,
-        t.total_price,
-        t.reservation_price,
+        t.prices,
         t.duration,
         t.image,
         t.public,
@@ -349,8 +369,20 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    // Get current month's prices
+    const currentPrices = rows[0].prices[currentMonth] || {
+      total_price: 0,
+      reservation_price: 0
+    };
+
+    // Create the tour object with both current prices and full price history
     const tour = {
       ...rows[0],
+      // Add current month's prices at top level for backward compatibility
+      total_price: currentPrices.total_price,
+      reservation_price: currentPrices.reservation_price,
+      // Keep the full prices object
+      prices: rows[0].prices,
       localizations: rows[0].localizations || [],
       translations: (rows[0].localizations || []).reduce((acc: any, loc: any) => {
         acc[loc.locale] = {
@@ -359,10 +391,10 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
           description: loc.description
         };
         return acc;
-      }, {})
+      }, {}),
+      // Add current month info for reference
+      currentMonth: currentMonth
     };
-
-     
 
     res.status(200).json({
       message: 'Tour retrieved successfully',
@@ -378,7 +410,8 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       error: process.env.NODE_ENV === 'development' ? error : undefined
     });
   }
-}
+};
+
 
 export const updateTour = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -405,8 +438,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     const { 
       localizations, 
       duration, 
-      total_price, 
-      reservation_price, 
+      prices,
       public: isPublic,
       image = null, 
       gallery = null,
@@ -462,9 +494,8 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     let updateFields = [
       'localizations = $2',
       'duration = $3',
-      'total_price = $4',
-      'reservation_price = $5',
-      'public = $6',
+      'prices = $4',
+      'public = $5',
       'updated_at = NOW()'
     ];
     
@@ -472,8 +503,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       id,
       JSON.stringify(localizations),
       duration,
-      total_price,
-      reservation_price,
+      JSON.stringify(prices),
       isPublic,
     ];
 
@@ -496,9 +526,22 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
 
     const { rows: [updatedTour] } = await pool.query(updateQuery, values);
 
+    // Add current month's prices to the response for backward compatibility
+    const currentMonth = (new Date().getMonth() + 1).toString();
+    const currentPrices = updatedTour.prices[currentMonth] || {
+      total_price: 0,
+      reservation_price: 0
+    };
+
+    const responseData = {
+      ...updatedTour,
+      total_price: currentPrices.total_price,
+      reservation_price: currentPrices.reservation_price
+    };
+
     res.status(200).json({
       message: 'Tour updated successfully',
-      data: updatedTour
+      data: responseData
     });
 
   } catch (error) {
@@ -508,7 +551,6 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     });
   }
 };
-
 
 export const deleteTour = async (req: Request, res: Response): Promise<void> => {
   try {
