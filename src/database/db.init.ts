@@ -5,23 +5,26 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
   const toursQuery = `
   CREATE TABLE IF NOT EXISTS tours (
     id UUID PRIMARY KEY,
-    prices JSONB NOT NULL,
+    group_prices JSONB NOT NULL,
+    individual_prices JSONB NOT NULL,
     localizations JSONB NOT NULL,
     duration VARCHAR(255) NOT NULL,
     public BOOLEAN DEFAULT false,
+    type BOOLEAN DEFAULT false,
     image TEXT,
     gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
+    date DATE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
 `;
-  
+
   try {
     await pool.query(toursQuery);
-    console.log("tours created")
+    console.log("Tours table created");
   } catch (error) {
-    console.error('Error creating tours table:', error);
-    throw error; 
+    console.error("Error creating tours table:", error);
+    throw error;
   }
 };
 
@@ -83,7 +86,6 @@ const createTransfersTableIfNotExist = async () => {
     console.error('Error creating transfers table:', error);
   }
 };
-
 
 const createDriversTableIfNoExist = async () => {
   const query = `
