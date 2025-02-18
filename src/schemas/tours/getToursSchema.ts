@@ -10,3 +10,14 @@ export const QueryParamsSchema = z.object({
   minPrice: z.coerce.number().optional(),
   maxPrice: z.coerce.number().optional()
 });
+
+
+
+
+export const QuerySchema = z.object({
+  locale: z.string().min(2).max(5).optional()
+});
+
+export const ParamsSchema = z.object({
+  id: z.string().uuid()
+});
