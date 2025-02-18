@@ -6,9 +6,9 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
   CREATE TABLE IF NOT EXISTS tours (
     id UUID PRIMARY KEY,
     group_prices JSONB NOT NULL,
-    individual_prices JSONB NOT NULL,
     localizations JSONB NOT NULL,
-    duration VARCHAR(255) NOT NULL,
+    day VARCHAR(255) NOT NULL,
+    night VARCHAR(255) NOT NULL,
     public BOOLEAN DEFAULT false,
     type BOOLEAN DEFAULT false,
     image TEXT,
