@@ -13,6 +13,11 @@ const GroupPriceSchema = z.object({
   discounted_price: z.number().optional()
 }).optional();
 
+const imagePattern = z.union([
+  z.string().regex(/^data:image\/[a-zA-Z]+;base64,/),
+  z.string().regex(/^\/uploads\//)
+]);
+
 export const UpdateToursSchema = z.object({
   localizations: z.array(TranslationSchema).min(1, "At least one localization is required"),
   day: z.string().optional(),
@@ -21,7 +26,7 @@ export const UpdateToursSchema = z.object({
   type: z.boolean().optional().default(false),
   public: z.boolean().optional().default(false),
   date: z.string().or(z.date()).optional(), 
-  image: z.string().regex(/^data:image\/[a-zA-Z]+;base64,/).nullable(),
+  image: z.optional(imagePattern.nullable()),
   gallery: z.array(z.string().regex(/^data:image\/[a-zA-Z]+;base64,/)).optional().nullable(),
   deleteImages: z.array(z.string()).optional().nullable(),
 });

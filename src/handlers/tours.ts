@@ -373,7 +373,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
     const { id } = paramsResult.data;
     const { locale } = queryResult.data;
 
-    let query = `
+    const query = `
       SELECT 
         t.id,
         t.date,
@@ -386,7 +386,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
         t.public,
         t.created_at,
         t.updated_at,
-        CASE 
+        CASE
           WHEN $2::text IS NOT NULL THEN (
             SELECT jsonb_agg(loc)
             FROM jsonb_array_elements(t.localizations) loc
@@ -399,7 +399,6 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
     `;
 
     const queryParams: any[] = [id, locale || null];
-
     const { rows } = await pool.query(query, queryParams);
 
     if (rows.length === 0) {
@@ -411,21 +410,11 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
     }
 
     const tourData = rows[0];
-
-    const translations = (tourData.localizations || []).reduce((acc: any, loc: any) => {
-      acc[loc.locale] = {
-        start_location: loc.start_location,
-        next_location: loc.next_location,
-        description: loc.description,
-      };
-      return acc;
-    }, {});
-
     const defaultGroupPrice = {
       total_price: null,
       reservation_price: null,
       discounted_price: null
-    }; 
+    };
 
     const tour = {
       id: tourData.id,
@@ -439,7 +428,6 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       created_at: tourData.created_at,
       updated_at: tourData.updated_at,
       localizations: tourData.localizations || [],
-      translations,
       group_prices: tourData.group_prices || defaultGroupPrice,
     };
 
