@@ -27,6 +27,7 @@ export interface Tour {
   image: string;
   gallery?: string[];
   date?: Date;
+  amount_persons: number;
   created_at: Date;
   updated_at: Date;
 }
