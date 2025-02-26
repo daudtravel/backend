@@ -25,36 +25,74 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       day,
       night,
       group_prices,
-      type = false,
+      type, 
       image,
       gallery = [],
-      date
+      date,
+      amount_persons,
+      individual_prices
     } = result.data;
 
-    const validateGroupPrices = (prices: any, tourType: boolean): boolean => {
- 
-      if (tourType === true) return true;
-      
- 
-      if (!prices || typeof prices !== 'object') return false;
 
-      const { total_price, reservation_price, discounted_price } = prices;
+    if (type === false) {
+      if (group_prices === null || (typeof group_prices === 'object' && Object.keys(group_prices).length === 0)) {
+        res.status(400).json({
+          message: 'Group prices are required for group tours'
+        });
+        return;
+      }
       
-      return (total_price === undefined || typeof total_price === 'number') &&
-             (reservation_price === undefined || typeof reservation_price === 'number') &&
-             (discounted_price === undefined || typeof discounted_price === 'number');
-    };
+    } else {
+      if (individual_prices === null) {
+        res.status(400).json({
+          message: 'Individual prices are required for individual tours'
+        });
+        return;
+      }
+      
+      if (!individual_prices || typeof individual_prices !== 'object') {
+        res.status(400).json({
+          message: 'Invalid individual prices structure'
+        });
+        return;
+      }
 
-    if (!validateGroupPrices(group_prices, type)) {
-      res.status(400).json({
-        message: 'Invalid group prices structure'
-      });
-      return;
+      if (!individual_prices.season || !individual_prices.off_season) {
+        res.status(400).json({
+          message: 'Individual prices must include both season and off_season'
+        });
+        return;
+      }
+      
+      const validatePriceCategory = (category: any): boolean => {
+        if (!category || typeof category !== 'object') return false;
+        
+        const { total_price, discounted_price, reservation_price } = category;
+        
+        return typeof total_price === 'number' &&
+               typeof discounted_price === 'number' &&
+               typeof reservation_price === 'number';
+      };
+      
+      if (!validatePriceCategory(individual_prices.season) || !validatePriceCategory(individual_prices.off_season)) {
+        res.status(400).json({
+          message: 'Invalid price structure in season or off_season'
+        });
+        return;
+      }
+
+      if (!amount_persons || typeof amount_persons !== 'number' || amount_persons <= 0) {
+        res.status(400).json({
+          message: 'Amount of persons is required for individual tours and must be a positive number'
+        });
+        return;
+      }
     }
 
     const tourId = uuidv4();
     const { mainImageUrl, galleryUrls } = await saveBase64Images(image, gallery);
-    const finalGroupPrices = type ? {} : (group_prices || {});
+    const finalGroupPrices = type === false ? group_prices : null;
+    const finalIndividualPrices = type === true ? individual_prices : null;
 
     const createQuery = `
       INSERT INTO tours (
@@ -63,13 +101,15 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
         day,
         night,
         group_prices,
+        individual_prices,
         type,
         image,
         gallery,
         public,
-        date
+        date,
+        amount_persons
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *;
     `;
 
@@ -78,12 +118,14 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       JSON.stringify(localizations),
       day,
       night,
-      JSON.stringify(finalGroupPrices), 
+      finalGroupPrices ? JSON.stringify(finalGroupPrices) : null,
+      finalIndividualPrices ? JSON.stringify(finalIndividualPrices) : null,
       type,
       mainImageUrl,
       galleryUrls,
-      false, 
-      date
+      false,
+      type === false ? date : null,
+      type === true ? amount_persons : null
     ];
 
     const { rows: [createdTour] } = await pool.query(createQuery, values);
@@ -109,6 +151,7 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
       SELECT 
         t.id,
         t.group_prices,
+        t.individual_prices,
         t.day,
         t.night,
         t.type,
@@ -116,6 +159,7 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         t.gallery,
         t.public,
         t.date,
+        t.amount_persons,
         t.created_at,
         t.updated_at,
         COUNT(*) OVER() as total_count,
@@ -177,6 +221,19 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         discounted_price: null
       };
 
+      const defaultIndividualPrice = {
+        season: {
+          total_price: null,
+          discounted_price: null,
+          reservation_price: null
+        },
+        off_season: {
+          total_price: null,
+          discounted_price: null,
+          reservation_price: null
+        }
+      };
+
       return {
         id: tour.id,
         localizations: tour.localizations || [],
@@ -187,9 +244,11 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         image: tour.image,
         gallery: tour.gallery || [],
         date: tour.date || null,
+        amount_persons: tour.amount_persons || null,
         created_at: tour.created_at,
         updated_at: tour.updated_at,
         group_prices: tour.group_prices || defaultGroupPrice,
+        individual_prices: tour.individual_prices || defaultIndividualPrice,
       };
     });
 
@@ -223,6 +282,7 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
       SELECT 
         t.id,
         t.group_prices,
+        t.individual_prices,
         t.day,
         t.night,
         t.type,
@@ -230,6 +290,7 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
         t.gallery,
         t.public,
         t.date,
+        t.amount_persons,
         t.created_at,
         t.updated_at,
         COUNT(*) OVER() as total_count,
@@ -256,8 +317,6 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
         )
       `;
     }
-
-    // Filter by start_location if provided
     if (start_location) {
       queryParams.push(start_location);
       query += `
@@ -269,10 +328,9 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
       `;
     }
 
-    // Add the filter for isGroup - NOTE THE REVERSED LOGIC: true = individual, false = group
     if (isGroup !== undefined) {
       const isGroupBoolean = isGroup === 'true';
-      queryParams.push(!isGroupBoolean); // We need to flip the boolean because type=true means individual
+      queryParams.push(!isGroupBoolean); 
       query += `
         AND t.type = $${queryParams.length}
       `;
@@ -313,19 +371,34 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
         discounted_price: null
       };
 
+      const defaultIndividualPrice = {
+        season: {
+          total_price: null,
+          discounted_price: null,
+          reservation_price: null
+        },
+        off_season: {
+          total_price: null,
+          discounted_price: null,
+          reservation_price: null
+        }
+      };
+
       return {
         id: tour.id,
         localizations: tour.localizations || [],
         day: tour.day,
         night: tour.night,
-        type: tour.type || false, // true = individual, false = group
+        type: tour.type || false, 
         public: tour.public || false,
         image: tour.image,
         gallery: tour.gallery || [],
         date: tour.date || null,
+        amount_persons: tour.amount_persons || null,
         created_at: tour.created_at,
         updated_at: tour.updated_at,
         group_prices: tour.group_prices || defaultGroupPrice,
+        individual_prices: tour.individual_prices || defaultIndividualPrice,
       };
     });
 
@@ -360,7 +433,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       });
       return;
     }
-
+    
     const queryResult = QuerySchema.safeParse(req.query);
     if (!queryResult.success) {
       res.status(400).json({
@@ -369,21 +442,23 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       });
       return;
     }
-
+    
     const { id } = paramsResult.data;
     const { locale } = queryResult.data;
-
+    
     const query = `
       SELECT 
         t.id,
         t.date,
         t.group_prices,
+        t.individual_prices,
         t.day,
         t.night,
         t.type,
         t.image,
         t.gallery,
         t.public,
+        t.amount_persons,
         t.created_at,
         t.updated_at,
         CASE
@@ -397,10 +472,10 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       FROM tours t
       WHERE t.id = $1
     `;
-
+    
     const queryParams: any[] = [id, locale || null];
     const { rows } = await pool.query(query, queryParams);
-
+    
     if (rows.length === 0) {
       res.status(404).json({
         message: "Tour not found",
@@ -408,14 +483,27 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       });
       return;
     }
-
+    
     const tourData = rows[0];
     const defaultGroupPrice = {
       total_price: null,
       reservation_price: null,
       discounted_price: null
     };
-
+    
+    const defaultIndividualPrice = {
+      season: {
+        total_price: null,
+        discounted_price: null,
+        reservation_price: null
+      },
+      off_season: {
+        total_price: null,
+        discounted_price: null,
+        reservation_price: null
+      }
+    };
+    
     const tour = {
       id: tourData.id,
       day: tourData.day,
@@ -424,13 +512,15 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       public: tourData.public || false,
       image: tourData.image,
       date: tourData.date,
+      amount_persons: tourData.amount_persons || null,
       gallery: tourData.gallery || [],
       created_at: tourData.created_at,
       updated_at: tourData.updated_at,
       localizations: tourData.localizations || [],
       group_prices: tourData.group_prices || defaultGroupPrice,
+      individual_prices: tourData.individual_prices || defaultIndividualPrice,
     };
-
+    
     res.status(200).json({
       message: "Tour retrieved successfully",
       data: { tour },
@@ -454,9 +544,9 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       });
       return;
     }
-
+    
     const { id } = paramsResult.data;
-
+    
     const result = UpdateToursSchema.safeParse(req.body);
     if (!result.success) {
       res.status(400).json({
@@ -465,12 +555,14 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       });
       return;
     }
-
+    
     const {
       localizations,
       day,
       night,
       group_prices,
+      individual_prices,
+      amount_persons,
       public: isPublic,
       type = false,
       date,
@@ -478,31 +570,86 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       gallery = null,
       deleteImages = null
     } = result.data;
+    
+    // Validate tour type and prices
+    if (type === false) {
+      if (group_prices === null || (typeof group_prices === 'object' && Object.keys(group_prices).length === 0)) {
+        res.status(400).json({
+          message: 'Group prices are required for group tours'
+        });
+        return;
+      }
+    } else {
+      if (individual_prices === null) {
+        res.status(400).json({
+          message: 'Individual prices are required for individual tours'
+        });
+        return;
+      }
+      
+      if (!individual_prices || typeof individual_prices !== 'object') {
+        res.status(400).json({
+          message: 'Invalid individual prices structure'
+        });
+        return;
+      }
+
+      if (!individual_prices.season || !individual_prices.off_season) {
+        res.status(400).json({
+          message: 'Individual prices must include both season and off_season'
+        });
+        return;
+      }
+      
+      const validatePriceCategory = (category: any): boolean => {
+        if (!category || typeof category !== 'object') return false;
+        
+        const { total_price, discounted_price, reservation_price } = category;
+        
+        return typeof total_price === 'number' &&
+               typeof discounted_price === 'number' &&
+               typeof reservation_price === 'number';
+      };
+      
+      if (!validatePriceCategory(individual_prices.season) || !validatePriceCategory(individual_prices.off_season)) {
+        res.status(400).json({
+          message: 'Invalid price structure in season or off_season'
+        });
+        return;
+      }
+
+      if (!amount_persons || typeof amount_persons !== 'number' || amount_persons <= 0) {
+        res.status(400).json({
+          message: 'Amount of persons is required for individual tours and must be a positive number'
+        });
+        return;
+      }
+    }
 
     const checkQuery =
-      `SELECT gallery, image 
-       FROM tours 
-       WHERE id = $1`;
-
+      `SELECT gallery, image, type
+        FROM tours
+        WHERE id = $1`;
+    
     const { rows: [tour] } = await pool.query(checkQuery, [id]);
-
+    
     if (!tour) {
       res.status(404).json({
         message: 'Tour not found',
       });
       return;
     }
-
+    
     let mainImageUrl = tour.image;
     let updatedGallery = tour.gallery || [];
-
+    
     // Handle deleted images
     if (deleteImages !== null && deleteImages.length > 0) {
       updatedGallery = updatedGallery.filter(
         (imageUrl: string) => !deleteImages.includes(imageUrl)
       );
     }
-
+    
     // Process new image and gallery uploads
     let galleryUrls: string[] = [];
     
@@ -516,61 +663,70 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       const processedImages = await saveBase64Images(null, gallery);
       galleryUrls.push(...processedImages.galleryUrls);
     }
-
+    
     if (gallery !== null) {
       updatedGallery.push(...galleryUrls);
     }
-
+    
+    // Prepare the final values based on tour type
+    const finalGroupPrices = type === false ? group_prices : null;
+    const finalIndividualPrices = type === true ? individual_prices : null;
+    const finalDate = type === false ? date : null;
+    const finalAmountPersons = type === true ? amount_persons : null;
+    
     let updateFields: string[] = [
       'localizations = $2',
       'day = $3',
       'night = $4',
       'group_prices = $5',
-      'public = $6',
-      'type = $7',
-      'date = $8',
+      'individual_prices = $6',
+      'public = $7',
+      'type = $8',
+      'date = $9',
+      'amount_persons = $10',
       'updated_at = NOW()'
     ];
-
+    
     let values: any[] = [
       id,
       JSON.stringify(localizations),
       day,
       night,
-      JSON.stringify(group_prices),
+      finalGroupPrices ? JSON.stringify(finalGroupPrices) : null,
+      finalIndividualPrices ? JSON.stringify(finalIndividualPrices) : null,
       isPublic,
       type,
-      date
+      finalDate,
+      finalAmountPersons
     ];
-
+    
     if (image !== null) {
       updateFields.push(`image = $${values.length + 1}`);
       values.push(mainImageUrl);
     }
-
+    
     if (gallery !== null || deleteImages !== null) {
       updateFields.push(`gallery = $${values.length + 1}`);
       values.push(updatedGallery);
     }
-
+    
     const updateQuery =
-      `UPDATE tours 
-       SET ${updateFields.join(', ')}
-       WHERE id = $1
-       RETURNING *`;
-
+      `UPDATE tours
+        SET ${updateFields.join(', ')}
+        WHERE id = $1
+        RETURNING *`;
+    
     const { rows: [updatedTour] } = await pool.query(updateQuery, values);
-
-    // Prepare response data with only group prices
+    
+    // Prepare response data with the appropriate price structure
     const responseData = {
       message: 'Tour updated successfully',
-      data: {
-        group_prices
-      }
+      data: type === false 
+        ? { group_prices: finalGroupPrices }
+        : { individual_prices: finalIndividualPrices, amount_persons: finalAmountPersons }
     };
-
+    
     res.status(200).json(responseData);
-
   } catch (error) {
     console.error('Error updating tour:', error);
     res.status(500).json({

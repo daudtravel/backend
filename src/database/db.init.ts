@@ -5,7 +5,8 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
   const toursQuery = `
   CREATE TABLE IF NOT EXISTS tours (
     id UUID PRIMARY KEY,
-    group_prices JSONB NOT NULL,
+    group_prices JSONB DEFAULT '{}'::jsonb,
+    individual_prices JSONB DEFAULT '{}'::jsonb,
     localizations JSONB NOT NULL,
     day VARCHAR(255) NOT NULL,
     night VARCHAR(255) NOT NULL,
@@ -13,7 +14,8 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
     type BOOLEAN DEFAULT false,
     image TEXT,
     gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
-    date DATE NOT NULL,
+    date DATE,
+    amount_persons INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
