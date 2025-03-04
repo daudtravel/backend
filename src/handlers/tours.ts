@@ -570,8 +570,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       gallery = null,
       deleteImages = null
     } = result.data;
-    
-    // Validate tour type and prices
+ 
     if (type === false) {
       if (group_prices === null || (typeof group_prices === 'object' && Object.keys(group_prices).length === 0)) {
         res.status(400).json({
@@ -643,14 +642,13 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     let mainImageUrl = tour.image;
     let updatedGallery = tour.gallery || [];
     
-    // Handle deleted images
+   
     if (deleteImages !== null && deleteImages.length > 0) {
       updatedGallery = updatedGallery.filter(
         (imageUrl: string) => !deleteImages.includes(imageUrl)
       );
     }
-    
-    // Process new image and gallery uploads
+   
     let galleryUrls: string[] = [];
     
     if (image) {
@@ -668,7 +666,6 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       updatedGallery.push(...galleryUrls);
     }
     
-    // Prepare the final values based on tour type
     const finalGroupPrices = type === false ? group_prices : null;
     const finalIndividualPrices = type === true ? individual_prices : null;
     const finalDate = type === false ? date : null;
