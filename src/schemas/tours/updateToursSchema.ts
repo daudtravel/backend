@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const TranslationSchema = z.object({
   locale: z.string().min(1, "Locale is required"),
+  name: z.string().optional(),
   start_location: z.string().optional(),
   next_location: z.array(z.string()).optional().default([]),
   description: z.string().optional()
@@ -36,6 +37,7 @@ export const UpdateToursSchema = z.object({
   day: z.string().optional(),
   night: z.string().optional(),
   group_prices: GroupPriceSchema,
+  daily: z.boolean().optional().default(false),
   amount_persons: z.number().positive().optional(),
   individual_prices: IndividualPricesSchema,
   type: z.boolean().optional().default(false),

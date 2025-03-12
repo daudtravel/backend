@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const TranslationSchema = z.object({
   locale: z.string().min(1, "Locale is required"),
+  name: z.string().optional(),
   start_location: z.string().optional(),
   next_location: z.array(z.string()).optional().default([]),
   description: z.string().optional(),
@@ -33,6 +34,7 @@ export const CreateToursSchema = z.object({
   day: z.string().optional(),
   night: z.string().optional(),
   type: z.boolean().optional().default(false),
+  daily: z.boolean().optional().default(false),
   date: z.string().or(z.date()).optional(),
   image: z.string().regex(/^data:image\/[a-zA-Z]+;base64,/),
   gallery: z

@@ -12,6 +12,7 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
     night VARCHAR(255) NOT NULL,
     public BOOLEAN DEFAULT false,
     type BOOLEAN DEFAULT false,
+    daily BOOLEAN DEFAULT false, 
     image TEXT,
     gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
     date DATE,

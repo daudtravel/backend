@@ -30,64 +30,11 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       gallery = [],
       date,
       amount_persons,
-      individual_prices
+      individual_prices,
+      daily 
     } = result.data;
 
-
-    if (type === false) {
-      if (group_prices === null || (typeof group_prices === 'object' && Object.keys(group_prices).length === 0)) {
-        res.status(400).json({
-          message: 'Group prices are required for group tours'
-        });
-        return;
-      }
-      
-    } else {
-      if (individual_prices === null) {
-        res.status(400).json({
-          message: 'Individual prices are required for individual tours'
-        });
-        return;
-      }
-      
-      if (!individual_prices || typeof individual_prices !== 'object') {
-        res.status(400).json({
-          message: 'Invalid individual prices structure'
-        });
-        return;
-      }
-
-      if (!individual_prices.season || !individual_prices.off_season) {
-        res.status(400).json({
-          message: 'Individual prices must include both season and off_season'
-        });
-        return;
-      }
-      
-      const validatePriceCategory = (category: any): boolean => {
-        if (!category || typeof category !== 'object') return false;
-        
-        const { total_price, discounted_price, reservation_price } = category;
-        
-        return typeof total_price === 'number' &&
-               typeof discounted_price === 'number' &&
-               typeof reservation_price === 'number';
-      };
-      
-      if (!validatePriceCategory(individual_prices.season) || !validatePriceCategory(individual_prices.off_season)) {
-        res.status(400).json({
-          message: 'Invalid price structure in season or off_season'
-        });
-        return;
-      }
-
-      if (!amount_persons || typeof amount_persons !== 'number' || amount_persons <= 0) {
-        res.status(400).json({
-          message: 'Amount of persons is required for individual tours and must be a positive number'
-        });
-        return;
-      }
-    }
+     
 
     const tourId = uuidv4();
     const { mainImageUrl, galleryUrls } = await saveBase64Images(image, gallery);
@@ -107,9 +54,10 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
         gallery,
         public,
         date,
-        amount_persons
+        amount_persons,
+        daily
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *;
     `;
 
@@ -125,7 +73,8 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
       galleryUrls,
       false,
       type === false ? date : null,
-      type === true ? amount_persons : null
+      type === true ? amount_persons : null,
+      daily  // Add daily value to query parameters
     ];
 
     const { rows: [createdTour] } = await pool.query(createQuery, values);
@@ -155,6 +104,7 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         t.day,
         t.night,
         t.type,
+        t.daily,
         t.image,
         t.gallery,
         t.public,
@@ -240,6 +190,7 @@ export const getAllTours = async (req: Request, res: Response): Promise<void> =>
         day: tour.day,
         night: tour.night,
         type: tour.type || false,
+        daily: tour.daily || false,
         public: tour.public || false,
         image: tour.image,
         gallery: tour.gallery || [],
@@ -286,6 +237,7 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
         t.day,
         t.night,
         t.type,
+        t.daily,
         t.image,
         t.gallery,
         t.public,
@@ -390,6 +342,7 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
         day: tour.day,
         night: tour.night,
         type: tour.type || false, 
+        daily: tour.daily || false,
         public: tour.public || false,
         image: tour.image,
         gallery: tour.gallery || [],
@@ -423,6 +376,7 @@ export const getPublicTours = async (req: Request, res: Response): Promise<void>
   }
 };
 
+
 export const getTourById = async (req: Request, res: Response): Promise<void> => {
   try {
     const paramsResult = ParamsSchema.safeParse(req.params);
@@ -455,6 +409,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
         t.day,
         t.night,
         t.type,
+        t.daily,
         t.image,
         t.gallery,
         t.public,
@@ -509,6 +464,7 @@ export const getTourById = async (req: Request, res: Response): Promise<void> =>
       day: tourData.day,
       night: tourData.night,
       type: tourData.type || false,
+      daily: tourData.daily || false,
       public: tourData.public || false,
       image: tourData.image,
       date: tourData.date,
@@ -560,6 +516,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       localizations,
       day,
       night,
+      daily = false,  
       group_prices,
       individual_prices,
       amount_persons,
@@ -675,12 +632,13 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       'localizations = $2',
       'day = $3',
       'night = $4',
-      'group_prices = $5',
-      'individual_prices = $6',
-      'public = $7',
-      'type = $8',
-      'date = $9',
-      'amount_persons = $10',
+      'daily = $5', // Add daily field
+      'group_prices = $6',
+      'individual_prices = $7',
+      'public = $8',
+      'type = $9',
+      'date = $10',
+      'amount_persons = $11',
       'updated_at = NOW()'
     ];
     
@@ -689,6 +647,7 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
       JSON.stringify(localizations),
       day,
       night,
+      daily, // Add daily value
       finalGroupPrices ? JSON.stringify(finalGroupPrices) : null,
       finalIndividualPrices ? JSON.stringify(finalIndividualPrices) : null,
       isPublic,
@@ -718,9 +677,12 @@ export const updateTour = async (req: Request, res: Response): Promise<void> => 
     // Prepare response data with the appropriate price structure
     const responseData = {
       message: 'Tour updated successfully',
-      data: type === false 
-        ? { group_prices: finalGroupPrices }
-        : { individual_prices: finalIndividualPrices, amount_persons: finalAmountPersons }
+      data: {
+        daily, // Include daily in the response
+        ...(type === false 
+          ? { group_prices: finalGroupPrices }
+          : { individual_prices: finalIndividualPrices, amount_persons: finalAmountPersons })
+      }
     };
     
     res.status(200).json(responseData);
