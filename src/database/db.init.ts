@@ -12,6 +12,7 @@ export const createToursTableIfNotExist = async (): Promise<void> => {
     night VARCHAR(255) NOT NULL,
     public BOOLEAN DEFAULT false,
     type BOOLEAN DEFAULT false,
+    daily BOOLEAN DEFAULT false, 
     image TEXT,
     gallery TEXT[] DEFAULT ARRAY[]::TEXT[],
     date DATE,
@@ -74,16 +75,14 @@ const createTransfersTableIfNotExist = async () => {
     CREATE TABLE IF NOT EXISTS transfers (
       id UUID PRIMARY KEY,
       localizations JSONB NOT NULL,
-      total_price INT NOT NULL,
-      reservation_price INT NOT NULL,
-      date DATE NOT NULL, 
+      prices JSONB NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
 
   try {
     await pool.query(query);
-    console.log('Trasnfers  table checked/created successfully');
+    console.log('Transfers table checked/created successfully');
   } catch (error) {
     console.error('Error creating transfers table:', error);
   }

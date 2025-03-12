@@ -11,128 +11,120 @@ const QueryParamsSchema = z.object({
 
 
 export const createTransfer = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const requestData = {
-        ...req.body,
-        date: new Date(req.body.date).toISOString().split('T')[0]  
-      };
-  
-      const result = CreateTransfersSchema.safeParse(requestData);
-
-        if (!result.success) {
-            res.status(400).json({
-              message: 'Invalid input data',
-              errors: result.error.format(),
-            });
-            return;
-          }
-          const { localizations, date, total_price, reservation_price } = result.data;
-          const transfersId = uuidv4();
-          const createQuery = `
-            INSERT INTO transfers (
-                id, 
-                localizations, 
-                date, 
-                total_price, 
-                reservation_price
-            )
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING *;
-            `;
-        
-            const values = [
-                transfersId,
-                JSON.stringify(localizations),
-                date,
-                total_price,
-                reservation_price,
-              ];
-            
-              const { rows: [createdTransfers]} = await pool.query(createQuery, values);
-            
-              res.status(201).json({
-                message: 'Tour created successfully',
-                data: createdTransfers
-              });
-    } catch (error) {
-        console.error('Error creating transfers:', error);
-        res.status(500).json({ 
-          message: 'Internal server error while creating transfers'
-        });
-      
+  try {
+    const result = CreateTransfersSchema.safeParse(req.body);
+    
+    if (!result.success) {
+      res.status(400).json({
+        message: 'Invalid input data',
+        errors: result.error.format(),
+      });
+      return;
     }
-  };
+    
+    const { localizations, prices } = result.data;
+    const transfersId = uuidv4();
+    
+    const createQuery = `
+      INSERT INTO transfers (
+        id,
+        localizations,
+        prices,
+        created_at
+      )
+      VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+      RETURNING *;
+    `;
+    
+    const values = [
+      transfersId,
+      JSON.stringify(localizations),
+      JSON.stringify(prices)
+    ];
+    
+    const { rows: [createdTransfer] } = await pool.query(createQuery, values);
+    
+    res.status(201).json({
+      message: 'Transfer created successfully',
+      data: createdTransfer
+    });
+  } catch (error) {
+    console.error('Error creating transfer:', error);
+    res.status(500).json({
+      message: 'Internal server error while creating transfer'
+    });
+  }
+};
 
-  export const getAllTransfers = async (req: Request, res: Response): Promise<void> => {
-    try {
-      // Validate query parameters
-      const result = QueryParamsSchema.safeParse(req.query);
-      if (!result.success) {
-        res.status(400).json({
-          message: 'Invalid query parameters',
-          errors: result.error.format(),
-        });
-        return;
-      }
-  
-      const { locale } = result.data;
-  
-      let query = `
-        SELECT 
-          t.*,
-          CASE 
-            WHEN $1::text IS NOT NULL THEN (
-              SELECT jsonb_agg(loc)
-              FROM jsonb_array_elements(t.localizations) loc
-              WHERE loc->>'locale' = $1
-            )
-            ELSE t.localizations
-          END as filtered_localizations
-        FROM transfers t
-      `;
-  
-      const queryParams: any[] = [locale || null];
-  
-      // Add locale filter if specified
-      if (locale) {
-        query += `
-          WHERE EXISTS (
-            SELECT 1
+export const getAllTransfers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = QueryParamsSchema.safeParse(req.query);
+    if (!result.success) {
+      res.status(400).json({
+        message: 'Invalid query parameters',
+        errors: result.error.format(),
+      });
+      return;
+    }
+    
+    const { locale } = result.data;
+    
+    let query = `
+      SELECT 
+        t.*,
+        CASE
+          WHEN $1::text IS NOT NULL THEN (
+            SELECT jsonb_agg(loc)
             FROM jsonb_array_elements(t.localizations) loc
             WHERE loc->>'locale' = $1
           )
-        `;
-      }
-  
-      const { rows } = await pool.query(query, queryParams);
-  
-      if (rows.length === 0) {
-        res.status(200).json({
-          message: 'No transfers found',
-          data: []
-        });
-        return;
-      }
-  
-      // Transform the response data
-      const transfers = rows.map(transfer => ({
-        ...transfer,
-        localizations: transfer.filtered_localizations || [],
-        filtered_localizations: undefined
-      }));
-  
-      res.status(200).json({
-        message: 'Transfers retrieved successfully',
-        data: transfers
-      });
-  
-    } catch (error) {
-      console.error('Error fetching transfers:', error);
-      res.status(500).json({
-        message: 'Internal server error while fetching transfers',
-      });
+          ELSE t.localizations
+        END as filtered_localizations
+      FROM transfers t
+    `;
+    
+    const queryParams: any[] = [locale || null];
+    
+    // Add locale filter if specified
+    if (locale) {
+      query += `
+        WHERE EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(t.localizations) loc
+          WHERE loc->>'locale' = $1
+        )
+      `;
     }
-  };
+    
+    const { rows } = await pool.query(query, queryParams);
+    
+    if (rows.length === 0) {
+      res.status(200).json({
+        message: 'No transfers found',
+        data: []
+      });
+      return;
+    }
+    
+    // Transform the response data
+    const transfers = rows.map(transfer => ({
+      id: transfer.id,
+      localizations: transfer.filtered_localizations || [],
+      prices: transfer.prices,
+      created_at: transfer.created_at
+    }));
+    
+    res.status(200).json({
+      message: 'Transfers retrieved successfully',
+      data: transfers
+    });
+  } catch (error) {
+    console.error('Error fetching transfers:', error);
+    res.status(500).json({
+      message: 'Internal server error while fetching transfers',
+    });
+  }
+};
 
 export const getTransferById = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
@@ -156,9 +148,17 @@ export const getTransferById = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    // Format response to match the new structure
+    const transfer = {
+      id: rows[0].id,
+      localizations: rows[0].localizations,
+      prices: rows[0].prices,
+      created_at: rows[0].created_at
+    };
+
     res.status(200).json({
       message: `Transfer with ID: ${id} retrieved successfully`,
-      data: rows[0],
+      data: transfer
     });
   } catch (error) {
     console.error('Error fetching transfer by ID:', error);
@@ -169,62 +169,55 @@ export const getTransferById = async (req: Request, res: Response): Promise<void
 };
 
 export const updateTransfer = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const result = EditTransferSchema.safeParse(req.body);
-  
-      if (!result.success) {
-        res.status(400).json({
-          message: 'Invalid input data',
-          errors: result.error.format(),
-        });
-        return;
-      }
-  
-      const { id } = req.params;
-      const { localizations, date, total_price, reservation_price } = result.data;
+  try {
+    const result = EditTransferSchema.safeParse(req.body);
     
- 
-      const updateQuery = `
+    if (!result.success) {
+      res.status(400).json({
+        message: 'Invalid input data',
+        errors: result.error.format(),
+      });
+      return;
+    }
+    
+    const { id } = req.params;
+    const { localizations, prices } = result.data;
+    
+    const updateQuery = `
       UPDATE transfers
       SET
         localizations = $1,
-        date = $2,
-        total_price = $3,
-        reservation_price = $4
-      WHERE id = $5
+        prices = $2
+      WHERE id = $3
       RETURNING *;
     `;
-  
-      const values = [
-        JSON.stringify(localizations),
-        date,
-        total_price,
-        reservation_price,
-        id,
-      ];
-  
-  
-      const { rows } = await pool.query(updateQuery, values);
-  
-
-      if (rows.length === 0) {
-        res.status(404).json({
-          message: `Transfer with ID ${id} not found`,
-        });
-        return;
-      }
-  
-      res.status(200).json({
-        message: 'Transfer updated successfully',
-        data: rows[0],
+    
+    const values = [
+      JSON.stringify(localizations),
+      JSON.stringify(prices),
+      id,
+    ];
+    
+    const { rows } = await pool.query(updateQuery, values);
+    
+    if (rows.length === 0) {
+      res.status(404).json({
+        message: `Transfer with ID ${id} not found`,
       });
-    } catch (error) {
-      console.error('Error updating transfer:', error);
-      res.status(500).json({
-        message: 'Internal server error while updating transfer',
-      });
+      return;
     }
-  };
+    
+    res.status(200).json({
+      message: 'Transfer updated successfully',
+      data: rows[0],
+    });
+  } catch (error) {
+    console.error('Error updating transfer:', error);
+    res.status(500).json({
+      message: 'Internal server error while updating transfer',
+    });
+  }
+};
 
 export const deleteTransfer = async (req: Request, res: Response): Promise<void> => {
     try {
