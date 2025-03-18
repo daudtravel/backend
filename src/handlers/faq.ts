@@ -4,6 +4,7 @@ import pool from '../config/sql';
 import { CreateFaqSchema } from '../schemas/faq/createFaqSchema';
 import { UpdateFaqSchema } from '../schemas/faq/editFaqSchema';
  
+ 
 
 export const createFAQ = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -21,12 +22,12 @@ export const createFAQ = async (req: Request, res: Response): Promise<void> => {
     const faqId = uuidv4();
     
     const createQuery = `
-      INSERT INTO faqs (
+      INSERT INTO faq (
         id,
-        localizations,
-        created_at
+        localizations
+       
       )
-      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      VALUES ($1, $2 )
       RETURNING *;
     `;
     
@@ -49,88 +50,124 @@ export const createFAQ = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-
 export const updateFAQ = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const result = UpdateFaqSchema.safeParse(req.body);
-      
-      if (!result.success) {
-        res.status(400).json({
-          message: 'Invalid input data',
-          errors: result.error.format(),
-        });
-        return;
-      }
-      
-      const { id } = req.params;
-      const { localizations } = result.data;
-      
-      const updateQuery = `
-        UPDATE faqs
-        SET
-          localizations = $1,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2
-        RETURNING *;
-      `;
-      
-      const values = [
-        JSON.stringify(localizations),
-        id,
-      ];
-      
-      const { rows } = await pool.query(updateQuery, values);
-      
-      if (rows.length === 0) {
-        res.status(404).json({
-          message: `FAQ with ID ${id} not found`,
-        });
-        return;
-      }
-      
-      res.status(200).json({
-        message: 'FAQ updated successfully',
-        data: rows[0],
+  try {
+    const result = UpdateFaqSchema.safeParse(req.body);
+    
+    if (!result.success) {
+      res.status(400).json({
+        message: 'Invalid input data',
+        errors: result.error.format(),
       });
-    } catch (error) {
-      console.error('Error updating FAQ:', error);
-      res.status(500).json({
-        message: 'Internal server error while updating FAQ',
-      });
+      return;
     }
-  };
+    
+    const { id } = req.params;
+    const { localizations } = result.data;
+    
+    const updateQuery = `
+    UPDATE faq
+    SET localizations = $1
+    WHERE id = $2
+    RETURNING *;
+  `;
+    
+    const values = [
+      JSON.stringify(localizations),
+      id,
+    ];
+    
+    const { rows } = await pool.query(updateQuery, values);
+    
+    if (rows.length === 0) {
+      res.status(404).json({
+        message: `FAQ with ID ${id} not found`,
+      });
+      return;
+    }
+    
+    res.status(200).json({
+      message: 'FAQ updated successfully',
+      data: rows[0],
+    });
+  } catch (error) {
+    console.error('Error updating FAQ:', error);
+    res.status(500).json({
+      message: 'Internal server error while updating FAQ',
+    });
+  }
+};
 
 
-export const getAllFAQs = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const faqsQuery = `
-        SELECT *
-        FROM faqs
-        ORDER BY created_at DESC;
-      `;
-      
-      const { rows: faqs } = await pool.query(faqsQuery);
-      
-      res.status(200).json({
-        message: 'FAQs retrieved successfully',
-        data: faqs
-      });
-    } catch (error) {
-      console.error('Error retrieving FAQs:', error);
-      res.status(500).json({
-        message: 'Internal server error while retrieving FAQs'
-      });
-    }
-  };
 
  
-  
+export const getAllfaq = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const faqQuery = `
+        SELECT *
+        FROM faq
+      `;
+      
+      const { rows: faq } = await pool.query(faqQuery);
+      
+      res.status(200).json({
+        message: 'faq retrieved successfully',
+        data: faq
+      });
+    } catch (error) {
+      console.error('Error retrieving faq:', error);
+      res.status(500).json({
+        message: 'Internal server error while retrieving faq'
+      });
+    }
+  };
+
+export const getFaqById = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+       
+      if (!id) {
+        res.status(400).json({
+          message: 'FAQ ID is required'
+        });
+        return;
+      }
+      
+      const faqQuery = `
+        SELECT *
+        FROM faq
+        WHERE id = $1
+      `;
+      
+      const { rows: faq } = await pool.query(faqQuery, [id]);
+      
+     
+      if (faq.length === 0) {
+        res.status(404).json({
+          message: 'FAQ not found'
+        });
+        return;
+      }
+      
+      res.status(200).json({
+        message: 'FAQ retrieved successfully',
+        data: faq[0]
+      });
+    } catch (error) {
+      console.error('Error retrieving FAQ by ID:', error);
+      res.status(500).json({
+        message: 'Internal server error while retrieving FAQ'
+      });
+    }
+  };
+
+
 export const deleteFAQ = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       
       const deleteQuery = `
-        DELETE FROM faqs
+        DELETE FROM faq
         WHERE id = $1
         RETURNING id;
       `;
