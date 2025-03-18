@@ -1,7 +1,7 @@
 
 import pool from '../config/sql';
 
-export const createToursTableIfNotExist = async (): Promise<void> => {
+const createToursTableIfNotExist = async (): Promise<void> => {
   const toursQuery = `
   CREATE TABLE IF NOT EXISTS tours (
     id UUID PRIMARY KEY,
@@ -107,6 +107,43 @@ const createDriversTableIfNoExist = async () => {
   }
 };
 
+const createFaqTableIfNoExist = async () => {
+  const query = `
+    CREATE TABLE IF NOT EXISTS faq (
+      id UUID PRIMARY KEY,
+      localizations JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  try {
+    await pool.query(query);
+    console.log('faq  table checked/created successfully');
+  } catch (error) {
+    console.error('Error creating faq table:', error);
+  }
+};
+
+
+const createVideosTableIfNoExist = async () => {
+  const query = `
+    CREATE TABLE IF NOT EXISTS videos (
+      id UUID PRIMARY KEY,
+      youtube_link TEXT NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  try {
+    await pool.query(query);
+    console.log('Videos table checked/created successfully');
+  } catch (error) {
+    console.error('Error creating videos table:', error);
+  }
+};
+
 
 
 export const initDatabase = async () => {
@@ -114,5 +151,7 @@ export const initDatabase = async () => {
   await createEmailVerificationTableIfNotExist();
   await createToursTableIfNotExist();
   await createTransfersTableIfNotExist();
-  await createDriversTableIfNoExist()
+  await createDriversTableIfNoExist();
+  await createFaqTableIfNoExist();
+  await createVideosTableIfNoExist()
 };
