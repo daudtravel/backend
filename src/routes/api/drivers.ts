@@ -9,9 +9,4 @@ driversRouter.post("/add_driver",  addDriver);
 driversRouter.get("/drivers",  getAllDrivers);
 driversRouter.delete("/drivers/:id",  deleteDriver);
  
-
- 
-
-
-
 export default driversRouter;
