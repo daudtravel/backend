@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { createVideo, deleteVideo, getAllVideos } from "../../handlers/videos";
- 
+
 const videosRouter = Router();
 
-videosRouter.post("/create_video",  createVideo);
-videosRouter.get("/video",  getAllVideos);
-videosRouter.delete("/delete_video",  deleteVideo);
- 
+videosRouter.post("/create_video", createVideo);
+videosRouter.get("/video", getAllVideos);
+videosRouter.delete("/delete_video/:id", deleteVideo);
+
 
 
 export default videosRouter;
