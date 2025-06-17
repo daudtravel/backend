@@ -13,8 +13,6 @@ const corsOptions = {
   origin: [
     'https://daudtravel.com', 
     'https://www.daudtravel.com', 
-    'https://test.daudtravel.com',
-    'http://localhost:4000',
     'http://localhost:3000',
     'http://localhost:3001' 
   ],
@@ -43,6 +41,7 @@ app.use((req, res, next) => {
 app.use("/api", router);
 app.use("/api", ...swaggerMiddleware);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use(express.static('./src/public'));
 
 const PORT = process.env.PORT || 3001;
 

@@ -1,5 +1,4 @@
-
-import pool from '../config/sql';
+import pool from "../config/sql"
 
 const createToursTableIfNotExist = async (): Promise<void> => {
   const toursQuery = `
@@ -20,16 +19,16 @@ const createToursTableIfNotExist = async (): Promise<void> => {
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
-`;
+`
 
   try {
-    await pool.query(toursQuery);
-    console.log("Tours table created");
+    await pool.query(toursQuery)
+    console.log("Tours table created")
   } catch (error) {
-    console.error("Error creating tours table:", error);
-    throw error;
+    console.error("Error creating tours table:", error)
+    throw error
   }
-};
+}
 
 const createUsersTableIfNotExist = async () => {
   const userQuery = `
@@ -43,15 +42,15 @@ const createUsersTableIfNotExist = async () => {
       admin BOOLEAN DEFAULT false, 
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-  `;
+  `
 
   try {
-    await pool.query(userQuery);
-    console.log("User table checked/created successfully");
+    await pool.query(userQuery)
+    console.log("User table checked/created successfully")
   } catch (error) {
-    console.error("Error creating users table:", error);
+    console.error("Error creating users table:", error)
   }
-};
+}
 
 const createEmailVerificationTableIfNotExist = async () => {
   const query = `
@@ -60,15 +59,15 @@ const createEmailVerificationTableIfNotExist = async () => {
       code VARCHAR(6) NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-  `;
+  `
 
   try {
-    await pool.query(query);
-    console.log('Email verification table checked/created successfully');
+    await pool.query(query)
+    console.log("Email verification table checked/created successfully")
   } catch (error) {
-    console.error('Error creating email verification table:', error);
+    console.error("Error creating email verification table:", error)
   }
-};
+}
 
 const createTransfersTableIfNotExist = async () => {
   const query = `
@@ -78,15 +77,15 @@ const createTransfersTableIfNotExist = async () => {
       prices JSONB NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-  `;
+  `
 
   try {
-    await pool.query(query);
-    console.log('Transfers table checked/created successfully');
+    await pool.query(query)
+    console.log("Transfers table checked/created successfully")
   } catch (error) {
-    console.error('Error creating transfers table:', error);
+    console.error("Error creating transfers table:", error)
   }
-};
+}
 
 const createDriversTableIfNoExist = async () => {
   const query = `
@@ -95,17 +94,16 @@ const createDriversTableIfNoExist = async () => {
       firstname VARCHAR(255) NOT NULL,
       lastname VARCHAR(255) NOT NULL,
       image TEXT
-       
     );
-  `;
+  `
 
   try {
-    await pool.query(query);
-    console.log('Drivers  table checked/created successfully');
+    await pool.query(query)
+    console.log("Drivers table checked/created successfully")
   } catch (error) {
-    console.error('Error creating transfers table:', error);
+    console.error("Error creating drivers table:", error)
   }
-};
+}
 
 const createFaqTableIfNoExist = async () => {
   const query = `
@@ -114,16 +112,15 @@ const createFaqTableIfNoExist = async () => {
       localizations JSONB NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-  `;
+  `
 
   try {
-    await pool.query(query);
-    console.log('faq  table checked/created successfully');
+    await pool.query(query)
+    console.log("FAQ table checked/created successfully")
   } catch (error) {
-    console.error('Error creating faq table:', error);
+    console.error("Error creating faq table:", error)
   }
-};
-
+}
 
 const createVideosTableIfNoExist = async () => {
   const query = `
@@ -134,24 +131,84 @@ const createVideosTableIfNoExist = async () => {
       description TEXT,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-  `;
+  `
 
   try {
-    await pool.query(query);
-    console.log('Videos table checked/created successfully');
+    await pool.query(query)
+    console.log("Videos table checked/created successfully")
   } catch (error) {
-    console.error('Error creating videos table:', error);
+    console.error("Error creating videos table:", error)
   }
-};
+}
 
+const createPaymentsTableIfNoExist = async () => {
+  const query = `
+   CREATE TABLE IF NOT EXISTS payment_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id VARCHAR(255) UNIQUE NOT NULL, -- BOG order ID
+    external_order_id VARCHAR(255) NOT NULL, -- Your internal order ID
+    customer_email VARCHAR(255), -- Optional customer email
+    customer_name VARCHAR(255), -- Optional customer name
+    customer_phone VARCHAR(255), -- Optional customer phone
+    total_amount DECIMAL(10,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'GEL',
+    status VARCHAR(50) DEFAULT 'pending', -- pending, success, failed, cancelled
+    items JSONB NOT NULL, -- Store basket items as JSON
+    callback_data JSONB, -- Store full callback data from BOG
+    redirect_url TEXT, -- Payment page URL
+    booking_metadata JSONB, -- Store tour booking details and other metadata
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+  `
 
+  try {
+    await pool.query(query)
+    console.log("Payments table checked/created successfully")
+  } catch (error) {
+    console.error("Error creating payments table:", error)
+  }
+}
+
+const updatePaymentsTableIfNeeded = async () => {
+  try {
+    // Add booking_metadata column if it doesn't exist
+    const addColumnQuery = `
+      ALTER TABLE payment_orders 
+      ADD COLUMN IF NOT EXISTS booking_metadata JSONB;
+    `
+    await pool.query(addColumnQuery)
+    console.log("Booking metadata column added/checked successfully")
+
+    // Create index for faster queries on booking metadata
+    const createGinIndexQuery = `
+      CREATE INDEX IF NOT EXISTS idx_payment_orders_booking_metadata 
+      ON payment_orders USING GIN (booking_metadata);
+    `
+    await pool.query(createGinIndexQuery)
+    console.log("GIN index on booking_metadata created/checked successfully")
+
+    // Create index for tour bookings specifically
+    const createTourIndexQuery = `
+      CREATE INDEX IF NOT EXISTS idx_payment_orders_tour_bookings 
+      ON payment_orders ((booking_metadata->>'booking_type')) 
+      WHERE booking_metadata->>'booking_type' = 'tour';
+    `
+    await pool.query(createTourIndexQuery)
+    console.log("Tour bookings index created/checked successfully")
+  } catch (error) {
+    console.error("Error updating payments table:", error)
+  }
+}
 
 export const initDatabase = async () => {
-  await createUsersTableIfNotExist();
-  await createEmailVerificationTableIfNotExist();
-  await createToursTableIfNotExist();
-  await createTransfersTableIfNotExist();
-  await createDriversTableIfNoExist();
-  await createFaqTableIfNoExist();
+  await createUsersTableIfNotExist()
+  await createEmailVerificationTableIfNotExist()
+  await createToursTableIfNotExist()
+  await createTransfersTableIfNotExist()
+  await createDriversTableIfNoExist()
+  await createFaqTableIfNoExist()
   await createVideosTableIfNoExist()
-};
+  await createPaymentsTableIfNoExist()
+  await updatePaymentsTableIfNeeded() // Add this line
+}

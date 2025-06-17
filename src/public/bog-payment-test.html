@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BOG Payment Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #333;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #007cba;
+      outline: none;
+    }
+    button {
+      background-color: #007cba;
+      color: white;
+      padding: 15px 30px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 18px;
+      width: 100%;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #005a87;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 6px;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🏦 Direct BOG Payment</h1>
+    <p>Simple payment without user registration</p>
+    
+    <form id="payment-form">
+      <div class="form-group">
+        <label for="amount">Amount *</label>
+        <input type="number" id="amount" step="0.01" min="0.01" value="10.00" required />
+      </div>
+      
+      <div class="form-group">
+        <label for="currency">Currency</label>
+        <select id="currency">
+          <option value="GEL">GEL - Georgian Lari</option>
+          <option value="USD">USD - US Dollar</option>
+          <option value="EUR">EUR - Euro</option>
+          <option value="GBP">GBP - British Pound</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="external_order_id">Order ID *</label>
+        <input type="text" id="external_order_id" required />
+      </div>
+      
+      <div class="form-group">
+        <label for="customer_name">Customer Name (Optional)</label>
+        <input type="text" id="customer_name" placeholder="John Doe" />
+      </div>
+      
+      <div class="form-group">
+        <label for="customer_email">Customer Email (Optional)</label>
+        <input type="email" id="customer_email" placeholder="john@example.com" />
+      </div>
+      
+      <div class="form-group">
+        <label for="customer_phone">Customer Phone (Optional)</label>
+        <input type="tel" id="customer_phone" placeholder="+995555000000" />
+      </div>
+      
+      <div class="form-group">
+        <label for="product_description">Product Description</label>
+        <textarea id="product_description" rows="3" placeholder="Describe what the customer is purchasing..."></textarea>
+      </div>
+      
+      <button type="submit" id="submit-button">Create Payment Order</button>
+    </form>
+    
+    <div id="payment-result"></div>
+  </div>
+
+  <script>
+    // Generate random order ID on page load
+    document.getElementById('external_order_id').value = 'ORDER_' + Date.now();
+
+    document.getElementById('payment-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const submitButton = document.getElementById('submit-button');
+      const resultDiv = document.getElementById('payment-result');
+
+      submitButton.disabled = true;
+      submitButton.textContent = 'Creating Payment...';
+      resultDiv.innerHTML = '';
+
+      const formData = {
+        amount: parseFloat(document.getElementById('amount').value),
+        currency: document.getElementById('currency').value,
+        external_order_id: document.getElementById('external_order_id').value,
+        customer_info: {
+          full_name: document.getElementById('customer_name').value,
+          email: document.getElementById('customer_email').value,
+          phone: document.getElementById('customer_phone').value
+        },
+        items: [{
+          product_id: 'PRODUCT_' + Date.now(),
+          description: document.getElementById('product_description').value || 'Test Product',
+          quantity: 1,
+          unit_price: parseFloat(document.getElementById('amount').value)
+        }],
+        success_url: window.location.origin + '/payment-success.html',
+        fail_url: window.location.origin + '/payment-fail.html'
+      };
+
+      try {
+        const response = await fetch('/api/payments/bog/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(formData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          console.log("✅ Payment order created. Redirecting to:", result.data.payment_url);
+
+          // Show a quick message before redirect
+          resultDiv.innerHTML = `
+            <div class="result success">
+              <h3>✅ Redirecting to Payment Page...</h3>
+              <p><strong>Order ID:</strong> ${result.data.order_id}</p>
+            </div>
+          `;
+
+          setTimeout(() => {
+            window.location.href = result.data.payment_url;
+          }, 1500); // delay just to show feedback
+        } else {
+          resultDiv.innerHTML = `
+            <div class="result error">
+              <h3>❌ Error Creating Payment</h3>
+              <p>${result.message}</p>
+              ${result.error ? `<p><small>${result.error}</small></p>` : ''}
+            </div>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <div class="result error">
+            <h3>❌ Network Error</h3>
+            <p>${error.message}</p>
+          </div>
+        `;
+      }
+
+      submitButton.disabled = false;
+      submitButton.textContent = 'Create Payment Order';
+    });
+  </script>
+</body>
+</html>
