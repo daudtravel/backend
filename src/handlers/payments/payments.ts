@@ -1,17 +1,15 @@
-import type { Request, Response } from "express"
-import { v4 as uuidv4 } from "uuid"
-import pool from "../config/sql"
-import crypto from "crypto"
-import { getBOGAccessToken } from "./payments/getBOGAccessToken"
+import type { Request, Response } from "express";
+import { v4 as uuidv4 } from "uuid";
+import pool from "../../config/sql";
+import crypto from "crypto";
+import { getBOGAccessToken } from "./getBOGAccessToken";
 
+export const BOG_AUTH_URL =
+  "https://oauth2.bog.ge/auth/realms/bog/protocol/openid-connect/token";
+export const BOG_API_URL = "https://api.bog.ge/payments/v1/ecommerce";
 
-
-export const BOG_AUTH_URL = "https://oauth2.bog.ge/auth/realms/bog/protocol/openid-connect/token"
-export const BOG_API_URL = "https://api.bog.ge/payments/v1/ecommerce"
-
-export const MOCK_MODE = process.env.NODE_ENV === "development" && !process.env.BOG_CLIENT_ID
-
-
+export const MOCK_MODE =
+  process.env.NODE_ENV === "development" && !process.env.BOG_CLIENT_ID;
 
 const BOG_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu4RUyAw3+CdkS3ZNILQh
@@ -21,31 +19,20 @@ TYQ90WIM8bGB6S/KLVoT1a7SnzabjoLc5Qf/SLDG5fu8dH8zckyeYKdRKSBJKvhx
 tcBuHV4f7qsynQT+f2UYbESX/TLHwT5qFWZDHZ0YUOUIvb8n7JujVSGZO9/+ll/g
 4ZIWhC1MlJgPObDwRkRd8NFOopgxMcMsDIZIoLbWKhHVq67hdbwpAq9K9WMmEhPn
 PwIDAQAB
------END PUBLIC KEY-----`
-
+-----END PUBLIC KEY-----`;
 
 export const getCallbackUrl = (): string => {
   if (process.env.NODE_ENV === "production") {
-    return `${process.env.BASE_URL}/api/payments/bog-callback`
+    return `${process.env.BASE_URL}/api/payments/bog-callback`;
   }
-  return process.env.BOG_CALLBACK_URL || "https://webhook.site/unique-id-here"
-}
-
+  return process.env.BOG_CALLBACK_URL || "https://webhook.site/unique-id-here";
+};
 
 export const getMockBOGToken = (): string => {
-  return "mock_token_for_development"
-}
+  return "mock_token_for_development";
+};
 
-const verifyBOGSignature = (body: string, signature: string): boolean => {
-  try {
-    const verifier = crypto.createVerify("SHA256")
-    verifier.update(body)
-    return verifier.verify(BOG_PUBLIC_KEY, signature, "base64")
-  } catch (error) {
-    console.error("Signature verification error:", error)
-    return false
-  }
-}
+ 
 
 // const handleBOGCallback = async (req: Request, res: Response): Promise<void> => {
 //   try {
@@ -87,9 +74,9 @@ const verifyBOGSignature = (body: string, signature: string): boolean => {
 
 //     // Update payment status in database
 //     const updateQuery = `
-//       UPDATE payment_orders 
-//       SET status = $1, 
-//           callback_data = $2, 
+//       UPDATE payment_orders
+//       SET status = $1,
+//           callback_data = $2,
 //           updated_at = CURRENT_TIMESTAMP
 //       WHERE order_id = $3
 //       RETURNING *;
@@ -134,7 +121,7 @@ const verifyBOGSignature = (body: string, signature: string): boolean => {
 //     const { order_id } = req.params
 
 //     const dbQuery = `
-//       SELECT * FROM payment_orders 
+//       SELECT * FROM payment_orders
 //       WHERE order_id = $1 OR external_order_id = $1;
 //     `
 //     const { rows } = await pool.query(dbQuery, [order_id])
@@ -175,7 +162,7 @@ const verifyBOGSignature = (body: string, signature: string): boolean => {
 
 //         if (status !== paymentOrder.status) {
 //           const updateQuery = `
-//             UPDATE payment_orders 
+//             UPDATE payment_orders
 //             SET status = $1, callback_data = $2, updated_at = CURRENT_TIMESTAMP
 //             WHERE order_id = $3
 //             RETURNING *;

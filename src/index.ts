@@ -11,27 +11,26 @@ const app = express();
 
 const corsOptions = {
   origin: [
-    'https://daudtravel.com', 
-    'https://www.daudtravel.com', 
-    'http://localhost:3000',
-    'http://localhost:3001' 
+    "https://daudtravel.com",
+    "https://www.daudtravel.com",
+    "http://localhost:3000",
+    "http://localhost:3001",
   ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'], 
-  exposedHeaders: ['Content-Type', 'Authorization'],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  exposedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204,
-  maxAge: 86400  
+  maxAge: 86400,
 };
 
-
-app.options('*', cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(cors(corsOptions));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(express.raw({ limit: '50mb' }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(express.raw({ limit: "50mb" }));
 app.use((req, res, next) => {
   req.setTimeout(300000);
   res.setTimeout(300000);
@@ -40,17 +39,17 @@ app.use((req, res, next) => {
 
 app.use("/api", router);
 app.use("/api", ...swaggerMiddleware);
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
-app.use(express.static('./src/public'));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use(express.static("./src/public"));
 
 const PORT = process.env.PORT || 3001;
 
 (async () => {
   try {
     await initDatabase();
-    console.log('Database tables initialized successfully');
+    console.log("Database tables initialized successfully");
   } catch (error) {
-    console.error('Error initializing database tables:', error);
+    console.error("Error initializing database tables:", error);
     process.exit(1);
   }
 
