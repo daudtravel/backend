@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { createTour, deleteTour, getAllTours, getPublicTours, getTourById, updateTour } from "../../handlers/tours";
+import { createTour, deleteTour, getAllTours, getPublicTours, getTourById, updateTour } from "../../controllers/toursController";
+ 
  
 const toursRouter = Router();
  

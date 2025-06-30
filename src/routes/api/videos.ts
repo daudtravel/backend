@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { createVideo, deleteVideo, getAllVideos } from "../../handlers/videos";
-
+import { createVideo, deleteVideo, getAllVideos } from "../../controllers/videosController";
+ 
 const videosRouter = Router();
 
 videosRouter.post("/create_video", createVideo);
