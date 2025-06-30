@@ -2,19 +2,12 @@ import { v4 as uuidv4 } from "uuid";
 import pool from "../config/sql";
 import { CreateFaqSchema } from "../schemas/faq/createFaqSchema";
 import { UpdateFaqSchema } from "../schemas/faq/editFaqSchema";
-
-export interface FAQ {
-  id: string;
-  localizations: any;
-}
-
-export interface CreateFAQData {
-  localizations: any;
-}
-
-export interface UpdateFAQData {
-  localizations: any;
-}
+import {
+  FAQ,
+  CreateFAQData,
+  UpdateFAQData,
+  DeleteFAQResult,
+} from "../types/faq";
 
 export const createFAQ = async (data: CreateFAQData): Promise<FAQ> => {
   const result = CreateFaqSchema.safeParse(data);
@@ -120,7 +113,7 @@ export const getFAQById = async (id: string): Promise<FAQ> => {
   return faq[0];
 };
 
-export const deleteFAQ = async (id: string): Promise<{ id: string }> => {
+export const deleteFAQ = async (id: string): Promise<DeleteFAQResult> => {
   const deleteQuery = `
     DELETE FROM faq
     WHERE id = $1

@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { Request, NextFunction } from "express";
+import { Request } from "express";
 
 interface JWTPayload {
   [key: string]: any;
@@ -20,9 +20,9 @@ const verifyToken = (req: Request, res: any) => {
 
   try {
     const verified = jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;
-    return res.status(200).json({ 
-      message: "Token verified successfully", 
-      user: verified 
+    return res.status(200).json({
+      message: "Token verified successfully",
+      user: verified,
     });
   } catch (error) {
     return res.status(401).json({ error: "Invalid token" });
