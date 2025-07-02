@@ -73,7 +73,6 @@ export const getBOGPaymentStatus = async (
     let paymentDetails: BOGPaymentDetails;
 
     if (MOCK_MODE) {
-      // Mock response for testing
       paymentDetails = {
         order_id: order_id,
         industry: "ecommerce",
@@ -120,7 +119,6 @@ export const getBOGPaymentStatus = async (
         },
       };
     } else {
-      // Real BOG API call
       const accessToken = await getBOGAccessToken();
 
       const response = await fetch(`${BOG_API_URL}/receipt/${order_id}`, {
@@ -153,7 +151,6 @@ export const getBOGPaymentStatus = async (
       paymentDetails.order_status.key
     );
 
-    // Return formatted response
     res.status(200).json({
       success: true,
       order_id: paymentDetails.order_id,
@@ -172,7 +169,7 @@ export const getBOGPaymentStatus = async (
       expires_at: paymentDetails.zoned_expire_date,
       buyer: paymentDetails.buyer,
       reject_reason: paymentDetails.reject_reason,
-      full_details: paymentDetails, // Include full response for debugging
+      full_details: paymentDetails,
     });
   } catch (error) {
     console.error("❌ Error getting BOG payment status:", error);

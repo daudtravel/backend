@@ -193,12 +193,10 @@ export const createBOGPaymentWithBookingData = async (
       console.log("✅ BOG payment created:", bogOrderData.id);
     }
 
-    // Calculate remaining amount
     const calculatedRemainingAmount = paymentType
       ? null
       : totalTourPrice - paymentAmount;
 
-    // Save to payment_orders table with simplified structure (removed unnecessary formatted fields)
     try {
       const insertQuery = `
         INSERT INTO payment_orders (
@@ -228,7 +226,6 @@ export const createBOGPaymentWithBookingData = async (
         RETURNING *;
       `;
 
-      // Only include locations if they exist and are not empty
       const locationsToStore =
         bookingData.locations && bookingData.locations.length > 0
           ? JSON.stringify(bookingData.locations)
@@ -244,19 +241,19 @@ export const createBOGPaymentWithBookingData = async (
         bookingData.tourDurationDays || 1,
         bookingData.tourDurationNights || 0,
         tourName,
-        cleanDescription, // Use cleaned description
+        cleanDescription,
         bookingData.startLocation || null,
         bookingData.endLocation || null,
         locationsToStore,
-        paymentType, // is_full_payment
-        Number(totalTourPrice), // Ensure it's a number
-        Number(paymentAmount), // Ensure it's a number
-        calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null, // Ensure it's a number or null
+        paymentType,
+        Number(totalTourPrice),
+        Number(paymentAmount),
+        calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
         external_order_id,
         bogOrderData.id,
         "pending",
         bogOrderData._links.redirect.href,
-        new Date(Date.now() + 30 * 60 * 1000), // expires in 30 minutes
+        new Date(Date.now() + 30 * 60 * 1000),
       ];
 
       const { rows } = await pool.query(insertQuery, values);
@@ -281,12 +278,12 @@ export const createBOGPaymentWithBookingData = async (
       status: "pending",
       expiresInMinutes: 30,
       createdAt: new Date().toISOString(),
-      // Simplified booking info - no duplication
+
       booking: {
         tourName: tourName,
-        customerName: `${firstName} ${lastName}`, // Single customer name field
+        customerName: `${firstName} ${lastName}`,
         peopleAmount: peopleAmount,
-        selectedDate: new Date(selectedDate).toISOString(), // Consistent date format
+        selectedDate: new Date(selectedDate).toISOString(),
         paymentType: paymentType ? "full" : "reservation",
       },
     });

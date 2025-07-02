@@ -30,7 +30,6 @@ export const handleBOGCallbackImproved = async (
   try {
     console.log("🔔 BOG Callback received!");
 
-    // Security verification
     const rawBody = JSON.stringify(req.body);
     const signature = req.headers["callback-signature"] as string;
 
@@ -41,12 +40,10 @@ export const handleBOGCallbackImproved = async (
         res.status(401).json({ error: "Invalid signature" });
         return;
       }
-      console.log("✅ BOG callback signature verified");
     }
 
     const callbackData = req.body;
 
-    // Validate callback structure
     if (!callbackData.event || callbackData.event !== "order_payment") {
       console.error("❌ Invalid callback event type:", callbackData.event);
       res.status(400).json({ error: "Invalid event type" });
@@ -60,9 +57,7 @@ export const handleBOGCallbackImproved = async (
     }
 
     const orderData = callbackData.body;
-    console.log("📦 Processing callback for order:", orderData.order_id);
 
-    // Handle different payment outcomes
     switch (orderData.order_status.key) {
       case "completed":
         await handlePaymentSuccessImproved(orderData);
@@ -77,7 +72,6 @@ export const handleBOGCallbackImproved = async (
         await handleOtherStatusImproved(orderData);
     }
 
-    // Return success response
     res.status(200).json({
       success: true,
       message: "Callback processed successfully",
@@ -97,7 +91,6 @@ async function handlePaymentSuccessImproved(orderData: any) {
   console.log("🎉 PAYMENT COMPLETED SUCCESSFULLY!");
 
   try {
-    // Update payment status in database
     const updateQuery = `
       UPDATE payment_orders 
       SET 
@@ -135,12 +128,6 @@ async function handlePaymentSuccessImproved(orderData: any) {
         paymentRecord.paid_amount,
         paymentRecord.currency
       );
-
-      // Here you can add additional business logic:
-      // - Send confirmation email
-      // - Create booking record
-      // - Update inventory
-      // - Send notifications
     } else {
       console.error("❌ Payment record not found in database");
     }
@@ -150,9 +137,6 @@ async function handlePaymentSuccessImproved(orderData: any) {
 }
 
 async function handlePaymentFailureImproved(orderData: any) {
-  console.log("💔 PAYMENT FAILED!");
-  console.log("❌ Rejection reason:", orderData.reject_reason);
-
   try {
     const updateQuery = `
       UPDATE payment_orders 
@@ -205,15 +189,12 @@ async function handlePaymentRefundImproved(orderData: any) {
     ];
 
     await pool.query(updateQuery, values);
-    console.log("💸 Refund recorded in database");
   } catch (error) {
     console.error("❌ Database error during refund:", error);
   }
 }
 
 async function handleOtherStatusImproved(orderData: any) {
-  console.log("ℹ️ Other payment status:", orderData.order_status.key);
-
   try {
     const updateQuery = `
       UPDATE payment_orders 

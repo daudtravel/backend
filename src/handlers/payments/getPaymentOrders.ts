@@ -1,7 +1,6 @@
 import type { Request, Response } from "express";
 import pool from "../../config/sql";
 
-// Get all payment orders with pagination
 export const getPaymentOrder = async (
   req: Request,
   res: Response
@@ -21,12 +20,10 @@ export const getPaymentOrder = async (
       limit: limitNum,
     });
 
-    // Count total records
     const countQuery = `SELECT COUNT(*) as total FROM payment_orders`;
     const countResult = await pool.query(countQuery);
     const totalRecords = parseInt(countResult.rows[0].total);
 
-    // Fetch paginated data
     const dataQuery = `
       SELECT 
         id,
@@ -61,21 +58,17 @@ export const getPaymentOrder = async (
 
     const { rows } = await pool.query(dataQuery, [limitNum, offset]);
 
-    // Format each order
     const formattedOrders = rows.map((order) => {
       let locations: string[] | undefined;
 
       if (order.locations) {
         try {
-          // If it's a string like "[ 'თბილისი', 'გუდაური' ]", clean it
           if (typeof order.locations === "string") {
             const cleaned = order.locations
-              .replace(/^\[|\]$/g, "") // remove square brackets
-              .replace(/['"]+/g, ""); // remove quotes
+              .replace(/^\[|\]$/g, "")
+              .replace(/['"]+/g, "");
             locations = cleaned.split(",").map((loc: string) => loc.trim());
-          }
-          // If already an array (e.g. from PostgreSQL text[]), use as-is
-          else if (Array.isArray(order.locations)) {
+          } else if (Array.isArray(order.locations)) {
             locations = order.locations;
           }
         } catch (err) {
@@ -116,13 +109,6 @@ export const getPaymentOrder = async (
     });
 
     const totalPages = Math.ceil(totalRecords / limitNum);
-
-    console.log("✅ Payment orders retrieved:", {
-      count: formattedOrders.length,
-      total: totalRecords,
-      page: pageNum,
-      totalPages,
-    });
 
     res.status(200).json({
       success: true,
