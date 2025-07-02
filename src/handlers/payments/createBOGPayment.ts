@@ -4,44 +4,34 @@ import { getBOGAccessToken } from "./getBOGAccessToken";
 import { BOG_API_URL, getCallbackUrl, MOCK_MODE } from "./payments";
 import pool from "../../config/sql";
 
-// Simplified booking data interface
 interface BookingData {
-  // Customer Information
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-
-  // Booking Details
   peopleAmount: number;
   selectedDate: Date;
   tourDurationDays?: number;
   tourDurationNights?: number;
-
-  // Payment Details
-  paymentType: boolean; // true = full payment, false = reservation
-  paymentAmount: number; // amount being paid now
-  totalTourPrice: number; // total price of the tour
-  remainingAmount?: number; // amount left to pay (for reservations)
-
-  // Tour Information
+  paymentType: boolean;
+  paymentAmount: number;
+  totalTourPrice: number;
+  remainingAmount?: number;
   tourName: string;
   tourDescription?: string;
   startLocation?: string;
   endLocation?: string;
-  locations?: string[]; // only include if not empty
+  locations?: string[];
 }
 
 interface PaymentRequest {
   bookingData: BookingData;
 }
 
-// Helper function to extract plain text from rich text editor format
 const extractPlainText = (description: string | undefined): string | null => {
   if (!description) return null;
 
   try {
-    // Try to parse as JSON (rich text editor format)
     const parsed = JSON.parse(description);
     if (parsed.blocks && Array.isArray(parsed.blocks)) {
       return (
@@ -54,7 +44,6 @@ const extractPlainText = (description: string | undefined): string | null => {
     }
     return description.trim() || null;
   } catch {
-    // If it's not JSON, return as plain text
     return description.trim() || null;
   }
 };
@@ -66,7 +55,6 @@ export const createBOGPaymentWithBookingData = async (
   try {
     const { bookingData }: PaymentRequest = req.body;
 
-    // Validate booking_data exists
     if (!bookingData) {
       res.status(400).json({
         success: false,
@@ -75,7 +63,6 @@ export const createBOGPaymentWithBookingData = async (
       return;
     }
 
-    // Extract and validate required fields
     const {
       paymentAmount,
       totalTourPrice,
@@ -90,7 +77,6 @@ export const createBOGPaymentWithBookingData = async (
       remainingAmount,
     } = bookingData;
 
-    // Validate required fields
     if (!paymentAmount || paymentAmount <= 0) {
       res.status(400).json({
         success: false,
@@ -133,7 +119,6 @@ export const createBOGPaymentWithBookingData = async (
       return;
     }
 
-    // Validate reservation logic
     if (!paymentType && (!remainingAmount || remainingAmount <= 0)) {
       res.status(400).json({
         success: false,
@@ -142,26 +127,10 @@ export const createBOGPaymentWithBookingData = async (
       return;
     }
 
-    // Create unique order ID
     const external_order_id = `ORDER_${uuidv4()}`;
-
-    console.log("🏦 Creating BOG payment with booking data:", {
-      external_order_id,
-      paymentAmount,
-      totalTourPrice,
-      customer: { firstName, lastName, email, phone },
-      tour: tourName,
-      people: peopleAmount,
-      isFullPayment: paymentType,
-    });
-
-    // Get BOG access token
     const accessToken = await getBOGAccessToken();
-
-    // Clean and format tour description
     const cleanDescription = extractPlainText(bookingData.tourDescription);
 
-    // Prepare BOG order request
     const bogOrderRequest = {
       callback_url: getCallbackUrl(),
       external_order_id,
@@ -171,7 +140,7 @@ export const createBOGPaymentWithBookingData = async (
         basket: [
           {
             product_id: `TOUR_${uuidv4()}`,
-            description: cleanDescription || tourName,
+            description: tourName,
             quantity: peopleAmount,
             unit_price: Math.round(paymentAmount / peopleAmount),
             total_price: paymentAmount,
@@ -196,7 +165,6 @@ export const createBOGPaymentWithBookingData = async (
           redirect: { href: `https://payment.bog.ge/?order_id=${mockOrderId}` },
         },
       };
-      console.log("🧪 Mock payment created:", mockOrderId);
     } else {
       const bogResponse = await fetch(`${BOG_API_URL}/orders`, {
         method: "POST",
@@ -292,19 +260,12 @@ export const createBOGPaymentWithBookingData = async (
       ];
 
       const { rows } = await pool.query(insertQuery, values);
-      console.log("✅ Payment order saved to database:", rows[0].id);
     } catch (dbError) {
-      console.error("❌ Database error:", dbError);
-
       if (dbError instanceof Error) {
         console.error("❌ Error details:", dbError.message);
       }
-
-      // Don't fail the payment creation if database save fails
-      console.log("⚠️ Payment will continue despite database error");
     }
 
-    // Return clean response with proper formatting
     res.status(201).json({
       success: true,
       orderId: bogOrderData.id,
