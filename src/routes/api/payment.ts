@@ -1,9 +1,10 @@
 import { Router } from "express";
 
 import { getBOGPaymentStatus } from "../../handlers/payments/handleBogPaymentStatus";
- 
+
 import { handleBOGCallbackImproved } from "../../handlers/payments/handleBogCallback";
-import { createBOGPaymentWithCustomerData } from "../../handlers/payments/createBogPayment";
+import { createBOGPaymentWithBookingData } from "../../handlers/payments/createBOGPayment";
+import { getPaymentOrder } from "../../handlers/payments/getPaymentOrders";
 
 /**
  * 🎯 PURPOSE: This file defines the URL endpoints (routes) for payment operations
@@ -26,7 +27,7 @@ const bogPaymentsRouter = Router();
 // Called by: Your frontend when customer wants to pay
 // Body: { amount: 25.50, currency: "GEL", description: "Premium service" }
 // Returns: { success: true, payment_url: "https://payment.bog.ge/...", order_id: "abc123" }
-bogPaymentsRouter.post("/payments/bog/create", createBOGPaymentWithCustomerData);
+bogPaymentsRouter.post("/payments/bog/create", createBOGPaymentWithBookingData);
 
 // 🔔 Handle payment results from BOG
 // URL: POST /api/payments/bog/callback
@@ -41,6 +42,8 @@ bogPaymentsRouter.post("/payments/bog/callback", handleBOGCallbackImproved);
 // Called by: Your frontend, admin panel, or customer support
 // Returns: { success: true, status: "completed", amount: { transferred: 25.50 } }
 bogPaymentsRouter.get("/payments/bog/status/:order_id", getBOGPaymentStatus);
+
+bogPaymentsRouter.get("/orders", getPaymentOrder);
 
 export default bogPaymentsRouter;
 
