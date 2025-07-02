@@ -48,7 +48,7 @@ const extractPlainText = (description: string | undefined): string | null => {
   }
 };
 
-export const createBOGPaymentWithBookingData = async (
+export const handleBOGPayment = async (
   req: Request,
   res: Response
 ): Promise<void> => {
