@@ -1,4 +1,4 @@
-import type { Request, Response } from "express";
+import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import pool from "../../config/sql";
 import { sendBookingConfirmationEmail } from "../../mail/purchase";
@@ -24,12 +24,29 @@ function verifyBOGSignature(body: string, signature: string): boolean {
   }
 }
 
+// Middleware to capture raw body as string for signature verification
+export const rawBodyMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  let data = "";
+  req.setEncoding("utf8");
+  req.on("data", (chunk) => {
+    data += chunk;
+  });
+  req.on("end", () => {
+    (req as any).rawBody = data;
+    next();
+  });
+};
+
 export const handleBOGCallback = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    const rawBody = JSON.stringify(req.body);
+    const rawBody = (req as any).rawBody as string;
     const signature = req.headers["callback-signature"] as string;
 
     if (signature) {
@@ -38,9 +55,14 @@ export const handleBOGCallback = async (
         res.status(401).json({ error: "Invalid signature" });
         return;
       }
+    } else {
+      // Signature header missing - you may want to reject or allow based on your security policy
+      res.status(400).json({ error: "Missing signature header" });
+      return;
     }
 
-    const callbackData = req.body;
+    // Parse JSON after successful signature verification
+    const callbackData = JSON.parse(rawBody);
 
     if (!callbackData.event || callbackData.event !== "order_payment") {
       res.status(400).json({ error: "Invalid event type" });
@@ -53,8 +75,6 @@ export const handleBOGCallback = async (
     }
 
     const orderData = callbackData.body;
-
-     
 
     switch (orderData.order_status.key) {
       case "completed":
@@ -77,12 +97,15 @@ export const handleBOGCallback = async (
       status: orderData.order_status.key,
     });
   } catch (error) {
+    console.error("Callback processing error:", error);
     res.status(500).json({
       success: false,
       error: "Internal server error",
     });
   }
 };
+
+// Your existing handlers below remain unchanged:
 
 async function handlePaymentSuccess(orderData: any) {
   try {
@@ -110,9 +133,7 @@ async function handlePaymentSuccess(orderData: any) {
 
     const { rows } = await pool.query(updateQuery, values);
 
-    if (rows.length > 0) {
-      const paymentRecord = rows[0];
-    } else {
+    if (rows.length === 0) {
       console.error("❌ Payment record not found in database");
     }
   } catch (error) {
@@ -145,12 +166,14 @@ async function handlePaymentFailure(orderData: any) {
     if (rows.length > 0) {
       console.log("❌ Payment failure recorded in database");
 
-      // Extract user info if available
+      // Extract user info from the failed order record if available
       const failedOrder = rows[0];
 
-      const firstname = "Lado";
-      const lastname = "Lado";
-      const email = "lado.asambadze1@gmail.com";
+      // Ideally, get real user info from failedOrder instead of hardcoded values:
+      const firstname = failedOrder.customer_first_name || "Lado";
+      const lastname = failedOrder.customer_last_name || "Lado";
+      const email = failedOrder.customer_email || "lado.asambadze1@gmail.com";
+
       await sendBookingConfirmationEmail({
         firstName: firstname,
         lastName: lastname,
