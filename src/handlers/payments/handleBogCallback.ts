@@ -2,7 +2,6 @@ import type { Request, Response } from "express";
 import { getBOGAccessToken } from "./getBOGAccessToken";
 import { BOG_API_URL, MOCK_MODE } from "./payments";
 import { saveBookingAfterPayment } from "./handleBOGPayment";
-
 import pool from "../../config/sql";
 import { sendSuccessfulPurchaseEmail } from "../../mail/purchase";
 
