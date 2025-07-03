@@ -135,7 +135,7 @@ export const handleBOGPayment = async (
       callback_url: getCallbackUrl(),
       external_order_id,
       purchase_units: {
-        currency: "USD",
+        currency: "GEL",
         total_amount: paymentAmount,
         basket: [
           {
@@ -273,7 +273,7 @@ export const handleBOGPayment = async (
       remainingAmount: calculatedRemainingAmount
         ? Number(calculatedRemainingAmount)
         : null,
-      currency: "USD",
+      currency: "GEL",
       status: "pending",
       expiresInMinutes: 30,
       createdAt: new Date().toISOString(),
