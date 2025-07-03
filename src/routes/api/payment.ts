@@ -12,7 +12,6 @@ import { getPaymentOrderById } from "../../handlers/payments/getPaymentByOrder";
 const bogPaymentsRouter = Router();
 
 bogPaymentsRouter.post("/payments/bog/create", handleBOGPayment);
-bogPaymentsRouter.post("/payments/bog/callback", handleBOGCallback);
 
 bogPaymentsRouter.post(
   "/payments/bog/callback",
