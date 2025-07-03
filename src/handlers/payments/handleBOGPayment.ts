@@ -28,6 +28,9 @@ interface PaymentRequest {
   bookingData: BookingData;
 }
 
+// Store pending payments in memory or temporary storage
+const pendingPayments = new Map<string, BookingData>();
+
 const extractPlainText = (description: string | undefined): string | null => {
   if (!description) return null;
 
@@ -77,6 +80,7 @@ export const handleBOGPayment = async (
       remainingAmount,
     } = bookingData;
 
+    // All your existing validations...
     if (!paymentAmount || paymentAmount <= 0) {
       res.status(400).json({
         success: false,
@@ -129,7 +133,6 @@ export const handleBOGPayment = async (
 
     const external_order_id = `ORDER_${uuidv4()}`;
     const accessToken = await getBOGAccessToken();
-    const cleanDescription = extractPlainText(bookingData.tourDescription);
 
     const bogOrderRequest = {
       callback_url: getCallbackUrl(),
@@ -192,75 +195,17 @@ export const handleBOGPayment = async (
       bogOrderData = await bogResponse.json();
     }
 
+    // Store booking data temporarily until payment is confirmed
+    pendingPayments.set(external_order_id, bookingData);
+
+    // Set a cleanup timer for expired payments (30 minutes)
+    setTimeout(() => {
+      pendingPayments.delete(external_order_id);
+    }, 30 * 60 * 1000);
+
     const calculatedRemainingAmount = paymentType
       ? null
       : totalTourPrice - paymentAmount;
-
-    try {
-      const insertQuery = `
-        INSERT INTO payment_orders (
-          customer_first_name, 
-          customer_last_name, 
-          customer_email, 
-          customer_phone,
-          people_amount, 
-          selected_date, 
-          tour_duration_days, 
-          tour_duration_nights,
-          tour_name,
-          tour_description,
-          start_location,
-          end_location,
-          locations,
-          is_full_payment,
-          total_tour_price,
-          amount_paid,
-          amount_remaining,
-          external_order_id, 
-          bog_order_id, 
-          status,
-          payment_url,
-          expires_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-        RETURNING *;
-      `;
-
-      const locationsToStore =
-        bookingData.locations && bookingData.locations.length > 0
-          ? JSON.stringify(bookingData.locations)
-          : null;
-
-      const values = [
-        firstName,
-        lastName,
-        email,
-        phone,
-        peopleAmount,
-        new Date(selectedDate),
-        bookingData.tourDurationDays || 1,
-        bookingData.tourDurationNights || 0,
-        tourName,
-        cleanDescription,
-        bookingData.startLocation || null,
-        bookingData.endLocation || null,
-        locationsToStore,
-        paymentType,
-        Number(totalTourPrice),
-        Number(paymentAmount),
-        calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
-        external_order_id,
-        bogOrderData.id,
-        "pending",
-        bogOrderData._links.redirect.href,
-        new Date(Date.now() + 30 * 60 * 1000),
-      ];
-
-      const { rows } = await pool.query(insertQuery, values);
-    } catch (dbError) {
-      if (dbError instanceof Error) {
-        console.error("❌ Error details:", dbError.message);
-      }
-    }
 
     res.status(201).json({
       success: true,
@@ -295,3 +240,97 @@ export const handleBOGPayment = async (
     });
   }
 };
+
+// New function to save booking data after successful payment
+export const saveBookingAfterPayment = async (
+  externalOrderId: string,
+  paymentDetails: any
+): Promise<void> => {
+  const bookingData = pendingPayments.get(externalOrderId);
+
+  if (!bookingData) {
+    console.error(`No pending payment found for order: ${externalOrderId}`);
+    return;
+  }
+
+  try {
+    const cleanDescription = extractPlainText(bookingData.tourDescription);
+    const calculatedRemainingAmount = bookingData.paymentType
+      ? null
+      : bookingData.totalTourPrice - bookingData.paymentAmount;
+
+    const insertQuery = `
+      INSERT INTO payment_orders (
+        customer_first_name, 
+        customer_last_name, 
+        customer_email, 
+        customer_phone,
+        people_amount, 
+        selected_date, 
+        tour_duration_days, 
+        tour_duration_nights,
+        tour_name,
+        tour_description,
+        start_location,
+        end_location,
+        locations,
+        is_full_payment,
+        total_tour_price,
+        amount_paid,
+        amount_remaining,
+        external_order_id, 
+        bog_order_id, 
+        status,
+        payment_url,
+        payment_completed_at,
+        transaction_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      RETURNING *;
+    `;
+
+    const locationsToStore =
+      bookingData.locations && bookingData.locations.length > 0
+        ? JSON.stringify(bookingData.locations)
+        : null;
+
+    const values = [
+      bookingData.firstName,
+      bookingData.lastName,
+      bookingData.email,
+      bookingData.phone,
+      bookingData.peopleAmount,
+      new Date(bookingData.selectedDate),
+      bookingData.tourDurationDays || 1,
+      bookingData.tourDurationNights || 0,
+      bookingData.tourName,
+      cleanDescription,
+      bookingData.startLocation || null,
+      bookingData.endLocation || null,
+      locationsToStore,
+      bookingData.paymentType,
+      Number(bookingData.totalTourPrice),
+      Number(bookingData.paymentAmount),
+      calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
+      externalOrderId,
+      paymentDetails.order_id,
+      "completed",
+      null,
+      new Date(),
+      paymentDetails.payment_detail?.transaction_id || null,
+    ];
+
+    const { rows } = await pool.query(insertQuery, values);
+
+    pendingPayments.delete(externalOrderId);
+
+    console.log(`✅ Booking saved successfully for order: ${externalOrderId}`);
+  } catch (dbError) {
+    console.error(
+      `❌ Error saving booking for order ${externalOrderId}:`,
+      dbError
+    );
+    throw dbError;
+  }
+};
+
+export { pendingPayments };

@@ -1,197 +1,91 @@
 import type { Request, Response } from "express";
-import crypto from "crypto";
-import pool from "../../config/sql";
+import { getBOGAccessToken } from "./getBOGAccessToken";
+import { BOG_API_URL, MOCK_MODE } from "./payments";
+import { saveBookingAfterPayment } from "./handleBOGPayment";
 
-const BOG_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu4RUyAw3+CdkS3ZNILQh
-zHI9Hemo+vKB9U2BSabppkKjzjjkf+0Sm76hSMiu/HFtYhqWOESryoCDJoqffY0Q
-1VNt25aTxbj068QNUtnxQ7KQVLA+pG0smf+EBWlS1vBEAFbIas9d8c9b9sSEkTrr
-TYQ90WIM8bGB6S/KLVoT1a7SnzabjoLc5Qf/SLDG5fu8dH8zckyeYKdRKSBJKvhx
-tcBuHV4f7qsynQT+f2UYbESX/TLHwT5qFWZDHZ0YUOUIvb8n7JujVSGZO9/+ll/g
-4ZIWhC1MlJgPObDwRkRd8NFOopgxMcMsDIZIoLbWKhHVq67hdbwpAq9K9WMmEhPn
-PwIDAQAB
------END PUBLIC KEY-----`;
-
-function verifyBOGSignature(body: string, signature: string): boolean {
-  try {
-    const verifier = crypto.createVerify("RSA-SHA256");
-    verifier.update(body, "utf8");
-    return verifier.verify(BOG_PUBLIC_KEY, signature, "base64");
-  } catch (error) {
-    console.error("Signature verification error:", error);
-    return false;
-  }
-}
-
-export const handleBOGCallbackImproved = async (
+export const handleBOGCallback = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    const rawBody = JSON.stringify(req.body);
-    const signature = req.headers["callback-signature"] as string;
+    const { order_id, external_order_id, status } = req.body;
 
-    if (signature) {
-      const isValidSignature = verifyBOGSignature(rawBody, signature);
-      if (!isValidSignature) {
-        res.status(401).json({ error: "Invalid signature" });
-        return;
+    console.log("📞 BOG Callback received:", {
+      order_id,
+      external_order_id,
+      status,
+    });
+
+    if (!order_id || !external_order_id) {
+      res.status(400).json({
+        success: false,
+        message: "Missing required callback data",
+      });
+      return;
+    }
+
+    let paymentDetails;
+
+    if (MOCK_MODE) {
+      paymentDetails = {
+        order_id: order_id,
+        external_order_id: external_order_id,
+        order_status: { key: "completed", value: "Completed" },
+        payment_detail: {
+          transaction_id: `mock_transaction_${Date.now()}`,
+          transfer_method: { key: "card", value: "Card Payment" },
+          code: "100",
+          code_description: "Successful payment",
+        },
+      };
+    } else {
+      const accessToken = await getBOGAccessToken();
+
+      const response = await fetch(`${BOG_API_URL}/receipt/${order_id}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to get payment details: ${response.statusText}`
+        );
       }
+
+      paymentDetails = await response.json();
     }
 
-    const callbackData = req.body;
-
-    if (!callbackData.event || callbackData.event !== "order_payment") {
-      res.status(400).json({ error: "Invalid event type" });
-      return;
-    }
-
-    if (!callbackData.body || !callbackData.body.order_id) {
-      res.status(400).json({ error: "Missing order_id" });
-      return;
-    }
-
-    const orderData = callbackData.body;
-
-    switch (orderData.order_status.key) {
-      case "completed":
-        await handlePaymentSuccessImproved(orderData);
-        break;
-      case "rejected":
-        await handlePaymentFailureImproved(orderData);
-        break;
-      case "refunded":
-        await handlePaymentRefundImproved(orderData);
-        break;
-      default:
-        await handleOtherStatusImproved(orderData);
+    if (paymentDetails.order_status.key === "completed") {
+      try {
+        await saveBookingAfterPayment(external_order_id, paymentDetails);
+      } catch (error) {
+        console.error(
+          `❌ Error saving booking after successful payment:`,
+          error
+        );
+      }
+    } else {
+      console.log(
+        `❌ Payment not successful for order: ${external_order_id}, status: ${paymentDetails.order_status.key}`
+      );
     }
 
     res.status(200).json({
       success: true,
-      message: "Callback processed successfully",
-      order_id: orderData.order_id,
-      status: orderData.order_status.key,
+      message: "Callback processed",
+      order_id: order_id,
+      external_order_id: external_order_id,
+      status: paymentDetails.order_status.key,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
+    console.error("❌ Error processing BOG callback:", error);
+    res.status(200).json({
+      success: true,
+      message: "Callback received but processing failed",
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 };
-
-async function handlePaymentSuccessImproved(orderData: any) {
-  try {
-    const updateQuery = `
-      UPDATE payment_orders 
-      SET 
-        status = 'completed',
-        transaction_id = $1,
-        payment_method = $2,
-        paid_amount = $3,
-        paid_at = CURRENT_TIMESTAMP,
-        callback_data = $4,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE bog_order_id = $5 OR external_order_id = $5
-      RETURNING *;
-    `;
-
-    const values = [
-      orderData.payment_detail?.transaction_id,
-      orderData.payment_detail?.transfer_method?.key,
-      orderData.purchase_units.transfer_amount,
-      JSON.stringify(orderData),
-      orderData.order_id,
-    ];
-
-    const { rows } = await pool.query(updateQuery, values);
-
-    if (rows.length > 0) {
-      const paymentRecord = rows[0];
-    } else {
-      console.error("❌ Payment record not found in database");
-    }
-  } catch (error) {
-    console.error("❌ Database error during payment success:", error);
-  }
-}
-
-async function handlePaymentFailureImproved(orderData: any) {
-  try {
-    const updateQuery = `
-      UPDATE payment_orders 
-      SET 
-        status = 'failed',
-        rejection_reason = $1,
-        failed_at = CURRENT_TIMESTAMP,
-        callback_data = $2,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE bog_order_id = $3 OR external_order_id = $3
-      RETURNING *;
-    `;
-
-    const values = [
-      orderData.reject_reason,
-      JSON.stringify(orderData),
-      orderData.order_id,
-    ];
-
-    const { rows } = await pool.query(updateQuery, values);
-
-    if (rows.length > 0) {
-      console.log("❌ Payment failure recorded in database");
-    }
-  } catch (error) {
-    console.error("❌ Database error during payment failure:", error);
-  }
-}
-
-async function handlePaymentRefundImproved(orderData: any) {
-  try {
-    const updateQuery = `
-      UPDATE payment_orders 
-      SET 
-        status = 'refunded',
-        refunded_amount = $1,
-        refunded_at = CURRENT_TIMESTAMP,
-        callback_data = $2,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE bog_order_id = $3 OR external_order_id = $3
-      RETURNING *;
-    `;
-
-    const values = [
-      orderData.purchase_units.refund_amount,
-      JSON.stringify(orderData),
-      orderData.order_id,
-    ];
-
-    await pool.query(updateQuery, values);
-  } catch (error) {
-    console.error("❌ Database error during refund:", error);
-  }
-}
-
-async function handleOtherStatusImproved(orderData: any) {
-  try {
-    const updateQuery = `
-      UPDATE payment_orders 
-      SET 
-        status = $1,
-        callback_data = $2,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE bog_order_id = $3 OR external_order_id = $3;
-    `;
-
-    const values = [
-      orderData.order_status.key,
-      JSON.stringify(orderData),
-      orderData.order_id,
-    ];
-
-    await pool.query(updateQuery, values);
-  } catch (error) {
-    console.error("❌ Database error during status update:", error);
-  }
-}
