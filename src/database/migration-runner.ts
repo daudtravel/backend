@@ -77,7 +77,6 @@ const createMigrationsTable = async (): Promise<void> => {
   `;
   try {
     await pool.query(query);
-    console.log("✅ Migrations table created/verified");
   } catch (error) {
     console.error("❌ Error creating migrations table:", error);
     throw error;
@@ -104,8 +103,6 @@ const verifyTablesExist = async (tableNames: string[]): Promise<boolean> => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     for (const tableName of tableNames) {
-      console.log(`  Checking table: ${tableName}`);
-
       const result = await pool.query(
         `
         SELECT EXISTS (
@@ -120,8 +117,6 @@ const verifyTablesExist = async (tableNames: string[]): Promise<boolean> => {
       console.log(`  Table ${tableName} exists: ${result.rows[0].exists}`);
 
       if (!result.rows[0].exists) {
-        console.log(`❌ Expected table '${tableName}' does not exist`);
-
         // Debug: List all existing tables
         const allTables = await pool.query(`
           SELECT table_name 
