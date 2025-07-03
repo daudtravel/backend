@@ -28,7 +28,7 @@ interface PaymentRequest {
   bookingData: BookingData;
 }
 
-// Store pending payments in memory or temporary storage
+// Store pending payments in memory until payment is confirmed
 const pendingPayments = new Map<string, BookingData>();
 
 const extractPlainText = (description: string | undefined): string | null => {
@@ -80,7 +80,7 @@ export const handleBOGPayment = async (
       remainingAmount,
     } = bookingData;
 
-    // All your existing validations...
+    // Validation
     if (!paymentAmount || paymentAmount <= 0) {
       res.status(400).json({
         success: false,
@@ -132,30 +132,17 @@ export const handleBOGPayment = async (
     }
 
     const external_order_id = `ORDER_${uuidv4()}`;
-    const accessToken = await getBOGAccessToken();
 
-    const bogOrderRequest = {
-      callback_url: getCallbackUrl(),
-      external_order_id,
-      purchase_units: {
-        currency: "GEL",
-        total_amount: paymentAmount,
-        basket: [
-          {
-            product_id: `TOUR_${uuidv4()}`,
-            description: tourName,
-            quantity: peopleAmount,
-            unit_price: Math.round(paymentAmount / peopleAmount),
-            total_price: paymentAmount,
-          },
-        ],
-      },
-      redirect_urls: {
-        success: `https://daudtravel.com/payment/success?order_id=${external_order_id}`,
-        fail: `https://daudtravel.com/payment/failure?order_id=${external_order_id}`,
-      },
-      ttl: 30,
-    };
+    // Store booking data temporarily until payment is confirmed
+    pendingPayments.set(external_order_id, bookingData);
+
+    // Set a cleanup timer for expired payments (30 minutes)
+    setTimeout(() => {
+      if (pendingPayments.has(external_order_id)) {
+        console.log(`⏰ Cleaning up expired payment: ${external_order_id}`);
+        pendingPayments.delete(external_order_id);
+      }
+    }, 30 * 60 * 1000);
 
     let bogOrderData: any;
 
@@ -169,6 +156,31 @@ export const handleBOGPayment = async (
         },
       };
     } else {
+      const accessToken = await getBOGAccessToken();
+
+      const bogOrderRequest = {
+        callback_url: getCallbackUrl(),
+        external_order_id,
+        purchase_units: {
+          currency: "GEL",
+          total_amount: paymentAmount,
+          basket: [
+            {
+              product_id: `TOUR_${uuidv4()}`,
+              description: tourName,
+              quantity: peopleAmount,
+              unit_price: Math.round(paymentAmount / peopleAmount),
+              total_price: paymentAmount,
+            },
+          ],
+        },
+        redirect_urls: {
+          success: `https://daudtravel.com/payment/success?order_id=${external_order_id}`,
+          fail: `https://daudtravel.com/payment/failure?order_id=${external_order_id}`,
+        },
+        ttl: 30,
+      };
+
       const bogResponse = await fetch(`${BOG_API_URL}/orders`, {
         method: "POST",
         headers: {
@@ -187,6 +199,10 @@ export const handleBOGPayment = async (
           statusText: bogResponse.statusText,
           body: errorText,
         });
+
+        // Clean up pending payment on API error
+        pendingPayments.delete(external_order_id);
+
         throw new Error(
           `BOG API error: ${bogResponse.statusText} - ${errorText}`
         );
@@ -194,14 +210,6 @@ export const handleBOGPayment = async (
 
       bogOrderData = await bogResponse.json();
     }
-
-    // Store booking data temporarily until payment is confirmed
-    pendingPayments.set(external_order_id, bookingData);
-
-    // Set a cleanup timer for expired payments (30 minutes)
-    setTimeout(() => {
-      pendingPayments.delete(external_order_id);
-    }, 30 * 60 * 1000);
 
     const calculatedRemainingAmount = paymentType
       ? null
@@ -222,7 +230,6 @@ export const handleBOGPayment = async (
       status: "pending",
       expiresInMinutes: 30,
       createdAt: new Date().toISOString(),
-
       booking: {
         tourName: tourName,
         customerName: `${firstName} ${lastName}`,
@@ -241,7 +248,7 @@ export const handleBOGPayment = async (
   }
 };
 
-// New function to save booking data after successful payment
+// Save booking data after successful payment - ONLY called on successful payment
 export const saveBookingAfterPayment = async (
   externalOrderId: string,
   paymentDetails: any
@@ -250,10 +257,16 @@ export const saveBookingAfterPayment = async (
 
   if (!bookingData) {
     console.error(`No pending payment found for order: ${externalOrderId}`);
-    return;
+    throw new Error(
+      `No pending payment data found for order: ${externalOrderId}`
+    );
   }
 
+  const client = await pool.connect();
+
   try {
+    await client.query("BEGIN");
+
     const cleanDescription = extractPlainText(bookingData.tourDescription);
     const calculatedRemainingAmount = bookingData.paymentType
       ? null
@@ -281,9 +294,9 @@ export const saveBookingAfterPayment = async (
         external_order_id, 
         bog_order_id, 
         status,
-        payment_url,
         payment_completed_at,
-        transaction_id
+        transaction_id,
+        created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
       RETURNING *;
     `;
@@ -313,24 +326,31 @@ export const saveBookingAfterPayment = async (
       calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
       externalOrderId,
       paymentDetails.order_id,
-      "completed",
-      null,
-      new Date(),
+      "completed", // Only save completed payments
+      new Date(), // payment_completed_at
       paymentDetails.payment_detail?.transaction_id || null,
+      new Date(), // created_at
     ];
 
-    const { rows } = await pool.query(insertQuery, values);
+    const { rows } = await client.query(insertQuery, values);
 
+    await client.query("COMMIT");
+
+    // Remove from pending payments after successful save
     pendingPayments.delete(externalOrderId);
 
     console.log(`✅ Booking saved successfully for order: ${externalOrderId}`);
   } catch (dbError) {
+    await client.query("ROLLBACK");
     console.error(
       `❌ Error saving booking for order ${externalOrderId}:`,
       dbError
     );
     throw dbError;
+  } finally {
+    client.release();
   }
 };
 
+// Export the pending payments map for use in callback handler
 export { pendingPayments };

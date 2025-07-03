@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-
 import { getBOGAccessToken } from "./getBOGAccessToken";
 import { BOG_API_URL, MOCK_MODE } from "./payments";
 
@@ -144,19 +143,35 @@ export const getBOGPaymentStatus = async (
       paymentDetails = await response.json();
     }
 
+    // Check if payment was actually completed and charged
+    const isActuallyPaid =
+      paymentDetails.order_status.key === "completed" &&
+      paymentDetails.payment_detail?.code === "100" &&
+      paymentDetails.purchase_units?.transfer_amount &&
+      Number.parseFloat(paymentDetails.purchase_units.transfer_amount) > 0;
+
     res.status(200).json({
       success: true,
       order_id: paymentDetails.order_id,
       external_order_id: paymentDetails.external_order_id,
       status: paymentDetails.order_status.key,
       status_description: paymentDetails.order_status.value,
+      is_actually_paid: isActuallyPaid,
       amount: {
-        requested: parseFloat(paymentDetails.purchase_units.request_amount),
-        transferred: parseFloat(paymentDetails.purchase_units.transfer_amount),
-        refunded: parseFloat(paymentDetails.purchase_units.refund_amount),
+        requested: Number.parseFloat(
+          paymentDetails.purchase_units.request_amount
+        ),
+        transferred: Number.parseFloat(
+          paymentDetails.purchase_units.transfer_amount
+        ),
+        refunded: Number.parseFloat(
+          paymentDetails.purchase_units.refund_amount
+        ),
         currency: paymentDetails.purchase_units.currency_code,
       },
       payment_method: paymentDetails.payment_detail?.transfer_method.key,
+      payment_code: paymentDetails.payment_detail?.code,
+      payment_code_description: paymentDetails.payment_detail?.code_description,
       transaction_id: paymentDetails.payment_detail?.transaction_id,
       created_at: paymentDetails.zoned_create_date,
       expires_at: paymentDetails.zoned_expire_date,
