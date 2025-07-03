@@ -38,13 +38,8 @@ export const getPaymentOrderById = async (
         total_tour_price,
         amount_paid,
         amount_remaining,
-        external_order_id,
-        bog_order_id,
         status,
-        payment_url,
-        expires_at,
-        created_at,
-        updated_at
+        created_at
       FROM payment_orders
       WHERE id = $1
     `;
@@ -101,13 +96,8 @@ export const getPaymentOrderById = async (
       amountRemaining: order.amount_remaining
         ? Number(order.amount_remaining)
         : undefined,
-      externalOrderId: order.external_order_id,
-      bogOrderId: order.bog_order_id,
       status: order.status,
-      paymentUrl: order.payment_url,
-      expiresAt: order.expires_at?.toISOString(),
       createdAt: order.created_at.toISOString(),
-      updatedAt: order.updated_at.toISOString(),
     };
 
     res.status(200).json({
@@ -123,5 +113,3 @@ export const getPaymentOrderById = async (
     });
   }
 };
-
- 
