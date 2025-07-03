@@ -148,8 +148,8 @@ export const handleBOGPayment = async (
         ],
       },
       redirect_urls: {
-        success: `http://localhost:3000/payment-success?order_id=${external_order_id}`,
-        fail: `http://localhost:3000/payment-failure?order_id=${external_order_id}`,
+        success: `https://daudtravel.com/payment/success?order_id=${external_order_id}`,
+        fail: `https://daudtravel.com/payment/failure?order_id=${external_order_id}`,
       },
       ttl: 30,
     };
@@ -190,7 +190,6 @@ export const handleBOGPayment = async (
       }
 
       bogOrderData = await bogResponse.json();
-      console.log("✅ BOG payment created:", bogOrderData.id);
     }
 
     const calculatedRemainingAmount = paymentType

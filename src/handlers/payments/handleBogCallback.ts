@@ -28,15 +28,12 @@ export const handleBOGCallbackImproved = async (
   res: Response
 ): Promise<void> => {
   try {
-    console.log("🔔 BOG Callback received!");
-
     const rawBody = JSON.stringify(req.body);
     const signature = req.headers["callback-signature"] as string;
 
     if (signature) {
       const isValidSignature = verifyBOGSignature(rawBody, signature);
       if (!isValidSignature) {
-        console.error("❌ Invalid BOG callback signature!");
         res.status(401).json({ error: "Invalid signature" });
         return;
       }
@@ -45,13 +42,11 @@ export const handleBOGCallbackImproved = async (
     const callbackData = req.body;
 
     if (!callbackData.event || callbackData.event !== "order_payment") {
-      console.error("❌ Invalid callback event type:", callbackData.event);
       res.status(400).json({ error: "Invalid event type" });
       return;
     }
 
     if (!callbackData.body || !callbackData.body.order_id) {
-      console.error("❌ Missing order_id in callback");
       res.status(400).json({ error: "Missing order_id" });
       return;
     }
@@ -79,7 +74,6 @@ export const handleBOGCallbackImproved = async (
       status: orderData.order_status.key,
     });
   } catch (error) {
-    console.error("❌ Error processing BOG callback:", error);
     res.status(500).json({
       success: false,
       error: "Internal server error",
@@ -88,8 +82,6 @@ export const handleBOGCallbackImproved = async (
 };
 
 async function handlePaymentSuccessImproved(orderData: any) {
-  console.log("🎉 PAYMENT COMPLETED SUCCESSFULLY!");
-
   try {
     const updateQuery = `
       UPDATE payment_orders 
@@ -117,17 +109,6 @@ async function handlePaymentSuccessImproved(orderData: any) {
 
     if (rows.length > 0) {
       const paymentRecord = rows[0];
-      console.log("✅ Data has been saved in database");
-      console.log(
-        "👤 Customer:",
-        paymentRecord.customer_first_name,
-        paymentRecord.customer_last_name
-      );
-      console.log(
-        "💰 Amount:",
-        paymentRecord.paid_amount,
-        paymentRecord.currency
-      );
     } else {
       console.error("❌ Payment record not found in database");
     }
@@ -167,8 +148,6 @@ async function handlePaymentFailureImproved(orderData: any) {
 }
 
 async function handlePaymentRefundImproved(orderData: any) {
-  console.log("💸 PAYMENT REFUNDED!");
-
   try {
     const updateQuery = `
       UPDATE payment_orders 

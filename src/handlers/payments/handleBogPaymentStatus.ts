@@ -68,8 +68,6 @@ export const getBOGPaymentStatus = async (
       return;
     }
 
-    console.log("🔍 Checking payment status for order:", order_id);
-
     let paymentDetails: BOGPaymentDetails;
 
     if (MOCK_MODE) {
@@ -146,11 +144,6 @@ export const getBOGPaymentStatus = async (
       paymentDetails = await response.json();
     }
 
-    console.log(
-      "📊 Payment status retrieved:",
-      paymentDetails.order_status.key
-    );
-
     res.status(200).json({
       success: true,
       order_id: paymentDetails.order_id,
@@ -172,7 +165,6 @@ export const getBOGPaymentStatus = async (
       full_details: paymentDetails,
     });
   } catch (error) {
-    console.error("❌ Error getting BOG payment status:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get payment status",
