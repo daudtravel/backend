@@ -39,11 +39,6 @@ export const getBOGAccessToken = async (): Promise<string> => {
     const responseText = await response.text();
 
     if (!response.ok) {
-      console.error("❌ BOG Authentication failed:", {
-        status: response.status,
-        statusText: response.statusText,
-        body: responseText,
-      });
       throw new Error(
         `BOG Authentication error: ${response.status} ${response.statusText} - ${responseText}`
       );
