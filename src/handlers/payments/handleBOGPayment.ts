@@ -175,8 +175,8 @@ export const handleBOGPayment = async (
           ],
         },
         redirect_urls: {
-          success: `http://localhost:3000/payment/success?order_id=${external_order_id}`,
-          fail: `http://localhost:3000/payment/failure?order_id=${external_order_id}`,
+          success: `${process.env.FRONTEND_CALLBACK}/payment/success?order_id=${external_order_id}`,
+          fail: `${process.env.FRONTEND_CALLBACK}/payment/failure?order_id=${external_order_id}`,
         },
         ttl: 30,
       };
