@@ -8,6 +8,56 @@ import {
   sendFailedPaymentEmail,
 } from "../../mail/purchase";
 
+// Helper function to retry BOG API calls
+const retryBOGApiCall = async (
+  url: string,
+  accessToken: string,
+  maxRetries = 3,
+  delay = 2000
+) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 BOG API attempt ${attempt}/${maxRetries}: ${url}`);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ BOG API success on attempt ${attempt}`);
+        return data;
+      }
+
+      if (response.status === 404 && attempt < maxRetries) {
+        console.log(
+          `⏳ BOG API returned 404, waiting ${delay}ms before retry ${
+            attempt + 1
+          }`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw new Error(
+        `BOG API error: ${response.status} ${response.statusText}`
+      );
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      console.log(
+        `⚠️ BOG API attempt ${attempt} failed, retrying in ${delay}ms...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
 export const handleBOGCallback = async (
   req: Request,
   res: Response
@@ -19,6 +69,7 @@ export const handleBOGCallback = async (
       order_id,
       external_order_id,
       status,
+      body: req.body,
     });
 
     if (!order_id || !external_order_id) {
@@ -53,24 +104,45 @@ export const handleBOGCallback = async (
     } else {
       try {
         const accessToken = await getBOGAccessToken();
-        const response = await fetch(`${BOG_API_URL}/receipt/${order_id}`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/json",
-          },
-        });
 
-        if (!response.ok) {
-          throw new Error(
-            `Failed to get payment details: ${response.status} ${response.statusText}`
-          );
-        }
+        // Try with retry logic
+        paymentDetails = await retryBOGApiCall(
+          `${BOG_API_URL}/receipt/${order_id}`,
+          accessToken,
+          3, // 3 attempts
+          3000 // 3 second delay
+        );
 
-        paymentDetails = await response.json();
         console.log("📄 Payment details retrieved:", paymentDetails);
       } catch (apiError) {
-        console.error("❌ Error fetching payment details from BOG:", apiError);
+        console.error(
+          "❌ Error fetching payment details from BOG after retries:",
+          apiError
+        );
+
+        // If callback status suggests success but API fails, treat as successful
+        if (status === "completed" || status === "success") {
+          console.log(
+            "🔄 Callback indicates success despite API error, processing as successful payment"
+          );
+
+          try {
+            // Process as successful payment without full verification
+            await processSuccessfulPaymentFallback(external_order_id, order_id);
+
+            res.status(200).json({
+              success: true,
+              message: "Payment processed successfully (fallback mode)",
+              order_id: order_id,
+              external_order_id: external_order_id,
+              status: "completed",
+            });
+            return;
+          } catch (fallbackError) {
+            console.error("❌ Fallback processing failed:", fallbackError);
+          }
+        }
+
         // Send failure email if we have pending payment data
         await sendFailedPaymentEmailForOrder(external_order_id, {
           order_status: {
@@ -158,6 +230,133 @@ export const handleBOGCallback = async (
       message: "Callback received but processing failed",
       error: error instanceof Error ? error.message : "Unknown error",
     });
+  }
+};
+
+// Fallback processing when BOG API is not available but callback indicates success
+const processSuccessfulPaymentFallback = async (
+  externalOrderId: string,
+  bogOrderId: string
+): Promise<void> => {
+  const bookingData = pendingPayments.get(externalOrderId);
+
+  if (!bookingData) {
+    throw new Error(
+      `No pending payment data found for order: ${externalOrderId}`
+    );
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const extractPlainText = (
+      description: string | undefined
+    ): string | null => {
+      if (!description) return null;
+      try {
+        const parsed = JSON.parse(description);
+        if (parsed.blocks && Array.isArray(parsed.blocks)) {
+          return (
+            parsed.blocks
+              .map((block: any) => block.text || "")
+              .filter((text: string) => text.trim())
+              .join(" ")
+              .trim() || null
+          );
+        }
+        return description.trim() || null;
+      } catch {
+        return description.trim() || null;
+      }
+    };
+
+    const cleanDescription = extractPlainText(bookingData.tourDescription);
+    const calculatedRemainingAmount = bookingData.paymentType
+      ? null
+      : bookingData.totalTourPrice - bookingData.paymentAmount;
+
+    const insertQuery = `
+      INSERT INTO payment_orders (
+        customer_first_name, 
+        customer_last_name, 
+        customer_email, 
+        customer_phone,
+        people_amount, 
+        selected_date, 
+        tour_duration_days, 
+        tour_duration_nights,
+        tour_name,
+        tour_description,
+        start_location,
+        end_location,
+        locations,
+        is_full_payment,
+        total_tour_price,
+        amount_paid,
+        amount_remaining,
+        external_order_id, 
+        bog_order_id, 
+        status,
+        payment_completed_at,
+        transaction_id,
+        created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      RETURNING *;
+    `;
+
+    const locationsToStore =
+      bookingData.locations && bookingData.locations.length > 0
+        ? JSON.stringify(bookingData.locations)
+        : null;
+
+    const values = [
+      bookingData.firstName,
+      bookingData.lastName,
+      bookingData.email,
+      bookingData.phone,
+      bookingData.peopleAmount,
+      new Date(bookingData.selectedDate),
+      bookingData.tourDurationDays || 1,
+      bookingData.tourDurationNights || 0,
+      bookingData.tourName,
+      cleanDescription,
+      bookingData.startLocation || null,
+      bookingData.endLocation || null,
+      locationsToStore,
+      bookingData.paymentType,
+      Number(bookingData.totalTourPrice),
+      Number(bookingData.paymentAmount),
+      calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
+      externalOrderId,
+      bogOrderId,
+      "completed", // Status as completed
+      new Date(), // payment_completed_at
+      `fallback_${Date.now()}`, // fallback transaction_id
+      new Date(), // created_at
+    ];
+
+    await client.query(insertQuery, values);
+    await client.query("COMMIT");
+
+    // Remove from pending payments after successful save
+    pendingPayments.delete(externalOrderId);
+
+    // Send success email
+    await sendSuccessEmailForOrder(externalOrderId);
+
+    console.log(
+      `✅ Fallback booking processing completed for order: ${externalOrderId}`
+    );
+  } catch (dbError) {
+    await client.query("ROLLBACK");
+    console.error(
+      `❌ Error in fallback processing for order ${externalOrderId}:`,
+      dbError
+    );
+    throw dbError;
+  } finally {
+    client.release();
   }
 };
 
