@@ -92,7 +92,7 @@ export const getBOGPaymentStatus = async (
           request_amount: "10.00",
           transfer_amount: "10.00",
           refund_amount: "0.00",
-          currency_code: "GEL",
+          currency_code: "USD",
           items: [
             {
               external_item_id: "PRODUCT_test",
