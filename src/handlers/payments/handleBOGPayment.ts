@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { getBOGAccessToken } from "./getBOGAccessToken";
-import { BOG_API_URL, getCallbackUrl, MOCK_MODE } from "./payments";
+import { BOG_API_URL, getCallbackUrl } from "./payments";
 import pool from "../../config/sql";
 
 interface BookingData {
@@ -27,9 +27,6 @@ interface BookingData {
 interface PaymentRequest {
   bookingData: BookingData;
 }
-
-// Store pending payments in memory until payment is confirmed
-const pendingPayments = new Map<string, BookingData>();
 
 const extractPlainText = (description: string | undefined): string | null => {
   if (!description) return null;
@@ -80,7 +77,6 @@ export const handleBOGPayment = async (
       remainingAmount,
     } = bookingData;
 
-    // Validation
     if (!paymentAmount || paymentAmount <= 0) {
       res.status(400).json({
         success: false,
@@ -132,88 +128,128 @@ export const handleBOGPayment = async (
     }
 
     const external_order_id = `ORDER_${uuidv4()}`;
+    const accessToken = await getBOGAccessToken();
+    const cleanDescription = extractPlainText(bookingData.tourDescription);
 
-    // Store booking data temporarily until payment is confirmed
-    pendingPayments.set(external_order_id, bookingData);
-
-    // Set a cleanup timer for expired payments (30 minutes)
-    setTimeout(() => {
-      if (pendingPayments.has(external_order_id)) {
-        console.log(`⏰ Cleaning up expired payment: ${external_order_id}`);
-        pendingPayments.delete(external_order_id);
-      }
-    }, 30 * 60 * 1000);
+    const bogOrderRequest = {
+      callback_url: getCallbackUrl(),
+      external_order_id,
+      purchase_units: {
+        currency: "GEL",
+        total_amount: paymentAmount,
+        basket: [
+          {
+            product_id: `TOUR_${uuidv4()}`,
+            description: tourName,
+            quantity: peopleAmount,
+            unit_price: Math.round(paymentAmount / peopleAmount),
+            total_price: paymentAmount,
+          },
+        ],
+      },
+      redirect_urls: {
+        success: `${process.env.FRONTEND_URL}/payment/success?order_id=${external_order_id}`,
+        fail: `${process.env.FRONTEND_URL}/payment/failure?order_id=${external_order_id}`,
+      },
+      ttl: 30,
+    };
 
     let bogOrderData: any;
 
-    if (MOCK_MODE) {
-      const mockOrderId = `mock_${uuidv4()}`;
-      bogOrderData = {
-        id: mockOrderId,
-        _links: {
-          details: { href: `${BOG_API_URL}/receipt/${mockOrderId}` },
-          redirect: { href: `https://payment.bog.ge/?order_id=${mockOrderId}` },
-        },
-      };
-    } else {
-      const accessToken = await getBOGAccessToken();
+    const bogResponse = await fetch(`${BOG_API_URL}/orders`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "Accept-Language": "en",
+        "Idempotency-Key": uuidv4(),
+      },
+      body: JSON.stringify(bogOrderRequest),
+    });
 
-      const bogOrderRequest = {
-        callback_url: getCallbackUrl(),
-        external_order_id,
-        purchase_units: {
-          currency: "GEL",
-          total_amount: paymentAmount,
-          basket: [
-            {
-              product_id: `TOUR_${uuidv4()}`,
-              description: tourName,
-              quantity: peopleAmount,
-              unit_price: Math.round(paymentAmount / peopleAmount),
-              total_price: paymentAmount,
-            },
-          ],
-        },
-        redirect_urls: {
-          success: `${process.env.FRONTEND_CALLBACK}/payment/success?order_id=${external_order_id}`,
-          fail: `${process.env.FRONTEND_CALLBACK}/payment/failure?order_id=${external_order_id}`,
-        },
-        ttl: 30,
-      };
-
-      const bogResponse = await fetch(`${BOG_API_URL}/orders`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-          "Accept-Language": "en",
-          "Idempotency-Key": uuidv4(),
-        },
-        body: JSON.stringify(bogOrderRequest),
+    if (!bogResponse.ok) {
+      const errorText = await bogResponse.text();
+      console.error("❌ BOG API Error:", {
+        status: bogResponse.status,
+        statusText: bogResponse.statusText,
+        body: errorText,
       });
-
-      if (!bogResponse.ok) {
-        const errorText = await bogResponse.text();
-        console.error("❌ BOG API Error:", {
-          status: bogResponse.status,
-          statusText: bogResponse.statusText,
-          body: errorText,
-        });
-
-        // Clean up pending payment on API error
-        pendingPayments.delete(external_order_id);
-
-        throw new Error(
-          `BOG API error: ${bogResponse.statusText} - ${errorText}`
-        );
-      }
-
-      bogOrderData = await bogResponse.json();
+      throw new Error(
+        `BOG API error: ${bogResponse.statusText} - ${errorText}`
+      );
     }
+
+    bogOrderData = await bogResponse.json();
 
     const calculatedRemainingAmount = paymentType
       ? null
       : totalTourPrice - paymentAmount;
+
+    try {
+      const insertQuery = `
+        INSERT INTO payment_orders (
+          customer_first_name, 
+          customer_last_name, 
+          customer_email, 
+          customer_phone,
+          people_amount, 
+          selected_date, 
+          tour_duration_days, 
+          tour_duration_nights,
+          tour_name,
+          tour_description,
+          start_location,
+          end_location,
+          locations,
+          is_full_payment,
+          total_tour_price,
+          amount_paid,
+          amount_remaining,
+          external_order_id, 
+          bog_order_id, 
+          status,
+          payment_url,
+          expires_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        RETURNING *;
+      `;
+
+      const locationsToStore =
+        bookingData.locations && bookingData.locations.length > 0
+          ? JSON.stringify(bookingData.locations)
+          : null;
+
+      const values = [
+        firstName,
+        lastName,
+        email,
+        phone,
+        peopleAmount,
+        new Date(selectedDate),
+        bookingData.tourDurationDays || 1,
+        bookingData.tourDurationNights || 0,
+        tourName,
+        cleanDescription,
+        bookingData.startLocation || null,
+        bookingData.endLocation || null,
+        locationsToStore,
+        paymentType,
+        Number(totalTourPrice),
+        Number(paymentAmount),
+        calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
+        external_order_id,
+        bogOrderData.id,
+        "pending",
+        bogOrderData._links.redirect.href,
+        new Date(Date.now() + 30 * 60 * 1000),
+      ];
+
+      const { rows } = await pool.query(insertQuery, values);
+    } catch (dbError) {
+      if (dbError instanceof Error) {
+        console.error("❌ Error details:", dbError.message);
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -230,6 +266,7 @@ export const handleBOGPayment = async (
       status: "pending",
       expiresInMinutes: 30,
       createdAt: new Date().toISOString(),
+
       booking: {
         tourName: tourName,
         customerName: `${firstName} ${lastName}`,
@@ -247,110 +284,3 @@ export const handleBOGPayment = async (
     });
   }
 };
-
-// Save booking data after successful payment - ONLY called on successful payment
-export const saveBookingAfterPayment = async (
-  externalOrderId: string,
-  paymentDetails: any
-): Promise<void> => {
-  const bookingData = pendingPayments.get(externalOrderId);
-
-  if (!bookingData) {
-    console.error(`No pending payment found for order: ${externalOrderId}`);
-    throw new Error(
-      `No pending payment data found for order: ${externalOrderId}`
-    );
-  }
-
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    const cleanDescription = extractPlainText(bookingData.tourDescription);
-    const calculatedRemainingAmount = bookingData.paymentType
-      ? null
-      : bookingData.totalTourPrice - bookingData.paymentAmount;
-
-    const insertQuery = `
-      INSERT INTO payment_orders (
-        customer_first_name, 
-        customer_last_name, 
-        customer_email, 
-        customer_phone,
-        people_amount, 
-        selected_date, 
-        tour_duration_days, 
-        tour_duration_nights,
-        tour_name,
-        tour_description,
-        start_location,
-        end_location,
-        locations,
-        is_full_payment,
-        total_tour_price,
-        amount_paid,
-        amount_remaining,
-        external_order_id, 
-        bog_order_id, 
-        status,
-        payment_completed_at,
-        transaction_id,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
-      RETURNING *;
-    `;
-
-    const locationsToStore =
-      bookingData.locations && bookingData.locations.length > 0
-        ? JSON.stringify(bookingData.locations)
-        : null;
-
-    const values = [
-      bookingData.firstName,
-      bookingData.lastName,
-      bookingData.email,
-      bookingData.phone,
-      bookingData.peopleAmount,
-      new Date(bookingData.selectedDate),
-      bookingData.tourDurationDays || 1,
-      bookingData.tourDurationNights || 0,
-      bookingData.tourName,
-      cleanDescription,
-      bookingData.startLocation || null,
-      bookingData.endLocation || null,
-      locationsToStore,
-      bookingData.paymentType,
-      Number(bookingData.totalTourPrice),
-      Number(bookingData.paymentAmount),
-      calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
-      externalOrderId,
-      paymentDetails.order_id,
-      "completed", // Only save completed payments
-      new Date(), // payment_completed_at
-      paymentDetails.payment_detail?.transaction_id || null,
-      new Date(), // created_at
-    ];
-
-    const { rows } = await client.query(insertQuery, values);
-
-    await client.query("COMMIT");
-
-    // Remove from pending payments after successful save
-    pendingPayments.delete(externalOrderId);
-
-    console.log(`✅ Booking saved successfully for order: ${externalOrderId}`);
-  } catch (dbError) {
-    await client.query("ROLLBACK");
-    console.error(
-      `❌ Error saving booking for order ${externalOrderId}:`,
-      dbError
-    );
-    throw dbError;
-  } finally {
-    client.release();
-  }
-};
-
-// Export the pending payments map for use in callback handler
-export { pendingPayments };

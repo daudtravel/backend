@@ -1,12 +1,8 @@
-import { BOG_AUTH_URL, getMockBOGToken, MOCK_MODE } from "./payments";
+import { BOG_AUTH_URL } from "./payments";
 
 let accessTokenCache: { token: string; expiresAt: number } | null = null;
 
 export const getBOGAccessToken = async (): Promise<string> => {
-  if (MOCK_MODE) {
-    return getMockBOGToken();
-  }
-
   if (accessTokenCache && accessTokenCache.expiresAt > Date.now()) {
     return accessTokenCache.token;
   }
