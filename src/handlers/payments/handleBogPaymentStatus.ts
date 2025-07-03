@@ -5,38 +5,16 @@ import pool from "../../config/sql";
 
 interface BOGPaymentDetails {
   order_id: string;
-  industry: string;
-  capture: string;
   external_order_id: string;
-  client: {
-    id: string;
-    brand_ka: string;
-    brand_en: string;
-    url: string;
-  };
-  zoned_create_date: string;
-  zoned_expire_date: string;
   order_status: {
     key: string;
     value: string;
-  };
-  buyer?: {
-    full_name: string;
-    email: string;
-    phone_number: string;
   };
   purchase_units: {
     request_amount: string;
     transfer_amount: string;
     refund_amount: string;
     currency_code: string;
-    items: Array<{
-      external_item_id: string;
-      description: string;
-      quantity: string;
-      unit_price: string;
-      total_price: string;
-    }>;
   };
   payment_detail?: {
     transfer_method: {
@@ -44,9 +22,6 @@ interface BOGPaymentDetails {
       value: string;
     };
     transaction_id: string;
-    payer_identifier: string;
-    payment_option: string;
-    card_type?: string;
     code: string;
     code_description: string;
   };
@@ -103,6 +78,18 @@ const retryBOGApiCall = async (
   }
 };
 
+// Strict payment verification - only returns true if money was actually charged
+const isPaymentActuallySuccessful = (
+  paymentDetails: BOGPaymentDetails
+): boolean => {
+  return (
+    paymentDetails.order_status?.key === "completed" &&
+    paymentDetails.payment_detail?.code === "100" &&
+    !!paymentDetails.purchase_units?.transfer_amount &&
+    Number.parseFloat(paymentDetails.purchase_units.transfer_amount) > 0
+  );
+};
+
 export const getBOGPaymentStatus = async (
   req: Request,
   res: Response
@@ -118,22 +105,66 @@ export const getBOGPaymentStatus = async (
       return;
     }
 
+    // First, check if we have this order in our database (means it was successfully processed)
+    try {
+      const dbQuery = `
+        SELECT 
+          external_order_id,
+          bog_order_id,
+          status,
+          amount_paid,
+          total_tour_price,
+          payment_completed_at,
+          transaction_id,
+          customer_first_name,
+          customer_last_name,
+          tour_name
+        FROM payment_orders 
+        WHERE bog_order_id = $1 OR external_order_id = $1
+      `;
+
+      const { rows } = await pool.query(dbQuery, [order_id]);
+
+      if (rows.length > 0) {
+        const dbOrder = rows[0];
+        console.log("✅ Found completed order in database");
+
+        res.status(200).json({
+          success: true,
+          order_id: order_id,
+          external_order_id: dbOrder.external_order_id,
+          status: "completed",
+          status_description: "Payment completed successfully",
+          is_actually_paid: true,
+          amount: {
+            requested: Number(dbOrder.total_tour_price),
+            transferred: Number(dbOrder.amount_paid),
+            refunded: 0,
+            currency: "GEL",
+          },
+          payment_method: "card",
+          payment_code: "100",
+          payment_code_description: "Successful payment",
+          transaction_id: dbOrder.transaction_id,
+          completed_at: dbOrder.payment_completed_at,
+          customer_name: `${dbOrder.customer_first_name} ${dbOrder.customer_last_name}`,
+          tour_name: dbOrder.tour_name,
+          source: "database",
+        });
+        return;
+      }
+    } catch (dbError) {
+      console.error("❌ Database query failed:", dbError);
+      // Continue to BOG API check
+    }
+
+    // If not in database, check BOG API
     let paymentDetails: BOGPaymentDetails;
 
     if (MOCK_MODE) {
       paymentDetails = {
         order_id: order_id,
-        industry: "ecommerce",
-        capture: "automatic",
         external_order_id: `ORDER_${order_id.split("_")[1] || "test"}`,
-        client: {
-          id: "10000",
-          brand_ka: "Test Business",
-          brand_en: "Test Business",
-          url: "https://example.com",
-        },
-        zoned_create_date: new Date().toISOString(),
-        zoned_expire_date: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
         order_status: {
           key: "completed",
           value: "Completed",
@@ -143,7 +174,6 @@ export const getBOGPaymentStatus = async (
           transfer_amount: "10.00",
           refund_amount: "0.00",
           currency_code: "GEL",
-          items: [],
         },
         payment_detail: {
           transfer_method: {
@@ -151,9 +181,6 @@ export const getBOGPaymentStatus = async (
             value: "Card Payment",
           },
           transaction_id: "mock_transaction_123",
-          payer_identifier: "548888xxxxxx9893",
-          payment_option: "direct_debit",
-          card_type: "visa",
           code: "100",
           code_description: "Successful payment",
         },
@@ -161,114 +188,88 @@ export const getBOGPaymentStatus = async (
     } else {
       try {
         const accessToken = await getBOGAccessToken();
-
-        // Try with retry logic
         paymentDetails = await retryBOGApiCall(
           `${BOG_API_URL}/receipt/${order_id}`,
           accessToken,
-          3, // 3 attempts
-          3000 // 3 second delay
+          3,
+          3000
         );
       } catch (apiError) {
-        console.error(
-          "❌ BOG API failed after retries, checking database:",
-          apiError
-        );
+        console.error("❌ BOG API failed after retries:", apiError);
 
-        // Check if we have this order in our database (fallback processed)
-        try {
-          const dbQuery = `
-            SELECT 
-              external_order_id,
-              bog_order_id,
-              status,
-              amount_paid,
-              total_tour_price,
-              payment_completed_at,
-              transaction_id
-            FROM payment_orders 
-            WHERE bog_order_id = $1 OR external_order_id LIKE '%' || $1 || '%'
-          `;
-
-          const { rows } = await pool.query(dbQuery, [order_id]);
-
-          if (rows.length > 0) {
-            const dbOrder = rows[0];
-            console.log("✅ Found order in database, returning success status");
-
-            res.status(200).json({
-              success: true,
-              order_id: order_id,
-              external_order_id: dbOrder.external_order_id,
-              status: "completed",
-              status_description: "Completed",
-              is_actually_paid: true,
-              amount: {
-                requested: Number(dbOrder.total_tour_price),
-                transferred: Number(dbOrder.amount_paid),
-                refunded: 0,
-                currency: "GEL",
-              },
-              payment_method: "card",
-              payment_code: "100",
-              payment_code_description: "Successful payment",
-              transaction_id: dbOrder.transaction_id,
-              created_at: dbOrder.payment_completed_at,
-              source: "database_fallback",
-            });
-            return;
-          }
-        } catch (dbError) {
-          console.error("❌ Database fallback failed:", dbError);
-        }
-
-        // If all else fails, return 404
         res.status(404).json({
           success: false,
-          message: "Payment not found and could not verify with bank",
+          message: "Payment not found",
           order_id: order_id,
+          note: "Payment not found in database and BOG API is unavailable",
         });
         return;
       }
     }
 
-    // Check if payment was actually completed and charged
-    const isActuallyPaid =
-      paymentDetails.order_status.key === "completed" &&
-      paymentDetails.payment_detail?.code === "100" &&
-      paymentDetails.purchase_units?.transfer_amount &&
-      Number.parseFloat(paymentDetails.purchase_units.transfer_amount) > 0;
+    // Check if payment is actually successful
+    const isActuallyPaid = isPaymentActuallySuccessful(paymentDetails);
 
-    res.status(200).json({
-      success: true,
-      order_id: paymentDetails.order_id,
-      external_order_id: paymentDetails.external_order_id,
-      status: paymentDetails.order_status.key,
-      status_description: paymentDetails.order_status.value,
-      is_actually_paid: isActuallyPaid,
-      amount: {
-        requested: Number.parseFloat(
-          paymentDetails.purchase_units.request_amount
-        ),
-        transferred: Number.parseFloat(
-          paymentDetails.purchase_units.transfer_amount
-        ),
-        refunded: Number.parseFloat(
-          paymentDetails.purchase_units.refund_amount
-        ),
-        currency: paymentDetails.purchase_units.currency_code,
-      },
-      payment_method: paymentDetails.payment_detail?.transfer_method.key,
-      payment_code: paymentDetails.payment_detail?.code,
-      payment_code_description: paymentDetails.payment_detail?.code_description,
-      transaction_id: paymentDetails.payment_detail?.transaction_id,
-      created_at: paymentDetails.zoned_create_date,
-      expires_at: paymentDetails.zoned_expire_date,
-      buyer: paymentDetails.buyer,
-      reject_reason: paymentDetails.reject_reason,
-      full_details: paymentDetails,
-    });
+    // Only return success details if payment is actually completed and charged
+    if (isActuallyPaid) {
+      res.status(200).json({
+        success: true,
+        order_id: paymentDetails.order_id,
+        external_order_id: paymentDetails.external_order_id,
+        status: "completed",
+        status_description: "Payment completed successfully",
+        is_actually_paid: true,
+        amount: {
+          requested: Number.parseFloat(
+            paymentDetails.purchase_units.request_amount
+          ),
+          transferred: Number.parseFloat(
+            paymentDetails.purchase_units.transfer_amount
+          ),
+          refunded: Number.parseFloat(
+            paymentDetails.purchase_units.refund_amount
+          ),
+          currency: paymentDetails.purchase_units.currency_code,
+        },
+        payment_method: paymentDetails.payment_detail?.transfer_method.key,
+        payment_code: paymentDetails.payment_detail?.code,
+        payment_code_description:
+          paymentDetails.payment_detail?.code_description,
+        transaction_id: paymentDetails.payment_detail?.transaction_id,
+        source: "bog_api",
+      });
+    } else {
+      // Payment exists but is not successful or not charged
+      res.status(200).json({
+        success: true,
+        order_id: paymentDetails.order_id,
+        external_order_id: paymentDetails.external_order_id,
+        status: paymentDetails.order_status.key,
+        status_description: paymentDetails.order_status.value,
+        is_actually_paid: false,
+        amount: {
+          requested: Number.parseFloat(
+            paymentDetails.purchase_units.request_amount
+          ),
+          transferred: Number.parseFloat(
+            paymentDetails.purchase_units.transfer_amount || "0"
+          ),
+          refunded: Number.parseFloat(
+            paymentDetails.purchase_units.refund_amount || "0"
+          ),
+          currency: paymentDetails.purchase_units.currency_code,
+        },
+        payment_method: paymentDetails.payment_detail?.transfer_method.key,
+        payment_code: paymentDetails.payment_detail?.code,
+        payment_code_description:
+          paymentDetails.payment_detail?.code_description,
+        reject_reason: paymentDetails.reject_reason,
+        source: "bog_api",
+        note: "Payment not successful or not charged",
+      });
+    }
   } catch (error) {
+    console.error("❌ Error getting payment status:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get payment status",

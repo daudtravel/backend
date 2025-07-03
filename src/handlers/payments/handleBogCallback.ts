@@ -58,6 +58,16 @@ const retryBOGApiCall = async (
   }
 };
 
+// Strict payment verification - only returns true if money was actually charged
+const isPaymentActuallySuccessful = (paymentDetails: any): boolean => {
+  return (
+    paymentDetails.order_status?.key === "completed" &&
+    paymentDetails.payment_detail?.code === "100" &&
+    paymentDetails.purchase_units?.transfer_amount &&
+    Number.parseFloat(paymentDetails.purchase_units.transfer_amount) > 0
+  );
+};
+
 export const handleBOGCallback = async (
   req: Request,
   res: Response
@@ -69,14 +79,30 @@ export const handleBOGCallback = async (
       order_id,
       external_order_id,
       status,
-      body: req.body,
     });
 
+    // Validate required callback data
     if (!order_id || !external_order_id) {
       console.error("❌ Missing required callback data");
       res.status(400).json({
         success: false,
         message: "Missing required callback data",
+      });
+      return;
+    }
+
+    // Check if we have pending payment data
+    const bookingData = pendingPayments.get(external_order_id);
+    if (!bookingData) {
+      console.warn(
+        `⚠️ No pending payment data found for order: ${external_order_id}`
+      );
+      res.status(200).json({
+        success: true,
+        message: "Order not found in pending payments",
+        order_id: order_id,
+        external_order_id: external_order_id,
+        status: "unknown",
       });
       return;
     }
@@ -90,8 +116,8 @@ export const handleBOGCallback = async (
         external_order_id: external_order_id,
         order_status: { key: "completed", value: "Completed" },
         purchase_units: {
-          transfer_amount: "10.00",
-          request_amount: "10.00",
+          transfer_amount: bookingData.paymentAmount.toString(),
+          request_amount: bookingData.paymentAmount.toString(),
           currency_code: "GEL",
         },
         payment_detail: {
@@ -104,57 +130,28 @@ export const handleBOGCallback = async (
     } else {
       try {
         const accessToken = await getBOGAccessToken();
-
-        // Try with retry logic
         paymentDetails = await retryBOGApiCall(
           `${BOG_API_URL}/receipt/${order_id}`,
           accessToken,
-          3, // 3 attempts
-          3000 // 3 second delay
+          3,
+          3000
         );
 
-        console.log("📄 Payment details retrieved:", paymentDetails);
-      } catch (apiError) {
-        console.error(
-          "❌ Error fetching payment details from BOG after retries:",
-          apiError
-        );
-
-        // If callback status suggests success but API fails, treat as successful
-        if (status === "completed" || status === "success") {
-          console.log(
-            "🔄 Callback indicates success despite API error, processing as successful payment"
-          );
-
-          try {
-            // Process as successful payment without full verification
-            await processSuccessfulPaymentFallback(external_order_id, order_id);
-
-            res.status(200).json({
-              success: true,
-              message: "Payment processed successfully (fallback mode)",
-              order_id: order_id,
-              external_order_id: external_order_id,
-              status: "completed",
-            });
-            return;
-          } catch (fallbackError) {
-            console.error("❌ Fallback processing failed:", fallbackError);
-          }
-        }
-
-        // Send failure email if we have pending payment data
-        await sendFailedPaymentEmailForOrder(external_order_id, {
-          order_status: {
-            key: "verification_failed",
-            value: "Payment verification failed",
-          },
-          reject_reason: "Unable to verify payment with bank",
+        console.log("📄 Payment details retrieved:", {
+          order_id: paymentDetails.order_id,
+          status: paymentDetails.order_status,
+          transfer_amount: paymentDetails.purchase_units?.transfer_amount,
+          code: paymentDetails.payment_detail?.code,
         });
+      } catch (apiError) {
+        console.error("❌ Error fetching payment details from BOG:", apiError);
+
+        // Clean up pending payment and respond with error
+        pendingPayments.delete(external_order_id);
 
         res.status(200).json({
           success: true,
-          message: "Callback received but payment verification failed",
+          message: "Payment verification failed",
           order_id: order_id,
           external_order_id: external_order_id,
           status: "verification_failed",
@@ -163,200 +160,68 @@ export const handleBOGCallback = async (
       }
     }
 
-    // STRICT PAYMENT VERIFICATION - Only process if money was actually charged
-    const isPaymentActuallyCompleted =
-      paymentDetails.order_status.key === "completed" &&
-      paymentDetails.payment_detail?.code === "100" &&
-      paymentDetails.purchase_units?.transfer_amount &&
-      Number.parseFloat(paymentDetails.purchase_units.transfer_amount) > 0;
-
-    if (isPaymentActuallyCompleted) {
+    // CRITICAL: Only process if payment is actually successful and money was charged
+    if (isPaymentActuallySuccessful(paymentDetails)) {
       try {
         console.log(
-          "✅ Payment verified as completed and charged, processing booking..."
+          "✅ Payment verified as successful and charged, processing booking..."
         );
 
-        // Save booking data to payment_orders table
+        // Save booking to database
         await saveBookingAfterPayment(external_order_id, paymentDetails);
 
         // Send success email
         await sendSuccessEmailForOrder(external_order_id);
 
-        console.log("✅ Booking and email processed successfully");
+        console.log("✅ Booking saved and success email sent");
+
+        res.status(200).json({
+          success: true,
+          message: "Payment processed successfully",
+          order_id: order_id,
+          external_order_id: external_order_id,
+          status: "completed",
+        });
       } catch (error) {
         console.error("❌ Error processing successful payment:", error);
+
         // Even if processing fails, we acknowledge the callback to prevent retries
+        res.status(200).json({
+          success: true,
+          message: "Payment confirmed but processing failed",
+          order_id: order_id,
+          external_order_id: external_order_id,
+          status: "processing_failed",
+        });
       }
-    }
-    // Handle failed/rejected payments
-    else if (
-      ["rejected", "failed", "cancelled", "expired"].includes(
-        paymentDetails.order_status.key
-      )
-    ) {
-      console.log(
-        `❌ Payment failed for order: ${external_order_id}, status: ${paymentDetails.order_status.key}`
-      );
+    } else {
+      // Payment was not successful or no money was charged
+      console.log(`❌ Payment not successful for order: ${external_order_id}`, {
+        status: paymentDetails.order_status?.key,
+        code: paymentDetails.payment_detail?.code,
+        transfer_amount: paymentDetails.purchase_units?.transfer_amount,
+      });
 
-      try {
-        // Send failure email but don't save to database
-        await sendFailedPaymentEmailForOrder(external_order_id, paymentDetails);
-        console.log("✅ Failed payment email sent");
-      } catch (error) {
-        console.error("❌ Error sending failed payment email:", error);
-      }
-    }
-    // Handle pending/processing payments or incomplete payments
-    else {
-      console.log(
-        `⏳ Payment not completed or not charged for order: ${external_order_id}, status: ${paymentDetails.order_status.key}, code: ${paymentDetails.payment_detail?.code}, transfer_amount: ${paymentDetails.purchase_units?.transfer_amount}`
-      );
-    }
+      // Clean up pending payment - no database save, no email
+      pendingPayments.delete(external_order_id);
 
-    // Always respond with success to BOG to prevent retries
-    res.status(200).json({
-      success: true,
-      message: "Callback processed",
-      order_id: order_id,
-      external_order_id: external_order_id,
-      status: paymentDetails.order_status.key,
-    });
+      res.status(200).json({
+        success: true,
+        message: "Payment not successful",
+        order_id: order_id,
+        external_order_id: external_order_id,
+        status: paymentDetails.order_status?.key || "failed",
+      });
+    }
   } catch (error) {
     console.error("❌ Critical error processing BOG callback:", error);
 
-    // Still respond with success to prevent BOG retries, but log the error
+    // Always respond with success to prevent BOG retries
     res.status(200).json({
       success: true,
       message: "Callback received but processing failed",
       error: error instanceof Error ? error.message : "Unknown error",
     });
-  }
-};
-
-// Fallback processing when BOG API is not available but callback indicates success
-const processSuccessfulPaymentFallback = async (
-  externalOrderId: string,
-  bogOrderId: string
-): Promise<void> => {
-  const bookingData = pendingPayments.get(externalOrderId);
-
-  if (!bookingData) {
-    throw new Error(
-      `No pending payment data found for order: ${externalOrderId}`
-    );
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
-    const extractPlainText = (
-      description: string | undefined
-    ): string | null => {
-      if (!description) return null;
-      try {
-        const parsed = JSON.parse(description);
-        if (parsed.blocks && Array.isArray(parsed.blocks)) {
-          return (
-            parsed.blocks
-              .map((block: any) => block.text || "")
-              .filter((text: string) => text.trim())
-              .join(" ")
-              .trim() || null
-          );
-        }
-        return description.trim() || null;
-      } catch {
-        return description.trim() || null;
-      }
-    };
-
-    const cleanDescription = extractPlainText(bookingData.tourDescription);
-    const calculatedRemainingAmount = bookingData.paymentType
-      ? null
-      : bookingData.totalTourPrice - bookingData.paymentAmount;
-
-    const insertQuery = `
-      INSERT INTO payment_orders (
-        customer_first_name, 
-        customer_last_name, 
-        customer_email, 
-        customer_phone,
-        people_amount, 
-        selected_date, 
-        tour_duration_days, 
-        tour_duration_nights,
-        tour_name,
-        tour_description,
-        start_location,
-        end_location,
-        locations,
-        is_full_payment,
-        total_tour_price,
-        amount_paid,
-        amount_remaining,
-        external_order_id, 
-        bog_order_id, 
-        status,
-        payment_completed_at,
-        transaction_id,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
-      RETURNING *;
-    `;
-
-    const locationsToStore =
-      bookingData.locations && bookingData.locations.length > 0
-        ? JSON.stringify(bookingData.locations)
-        : null;
-
-    const values = [
-      bookingData.firstName,
-      bookingData.lastName,
-      bookingData.email,
-      bookingData.phone,
-      bookingData.peopleAmount,
-      new Date(bookingData.selectedDate),
-      bookingData.tourDurationDays || 1,
-      bookingData.tourDurationNights || 0,
-      bookingData.tourName,
-      cleanDescription,
-      bookingData.startLocation || null,
-      bookingData.endLocation || null,
-      locationsToStore,
-      bookingData.paymentType,
-      Number(bookingData.totalTourPrice),
-      Number(bookingData.paymentAmount),
-      calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
-      externalOrderId,
-      bogOrderId,
-      "completed", // Status as completed
-      new Date(), // payment_completed_at
-      `fallback_${Date.now()}`, // fallback transaction_id
-      new Date(), // created_at
-    ];
-
-    await client.query(insertQuery, values);
-    await client.query("COMMIT");
-
-    // Remove from pending payments after successful save
-    pendingPayments.delete(externalOrderId);
-
-    // Send success email
-    await sendSuccessEmailForOrder(externalOrderId);
-
-    console.log(
-      `✅ Fallback booking processing completed for order: ${externalOrderId}`
-    );
-  } catch (dbError) {
-    await client.query("ROLLBACK");
-    console.error(
-      `❌ Error in fallback processing for order ${externalOrderId}:`,
-      dbError
-    );
-    throw dbError;
-  } finally {
-    client.release();
   }
 };
 
@@ -400,7 +265,6 @@ const sendSuccessEmailForOrder = async (
     if (order.locations) {
       try {
         if (typeof order.locations === "string") {
-          // Handle both JSON string and array string formats
           if (order.locations.startsWith("[")) {
             locations = JSON.parse(order.locations);
           } else {
@@ -440,52 +304,9 @@ const sendSuccessEmailForOrder = async (
     };
 
     await sendSuccessfulPurchaseEmail(bookingDetails);
-
     console.log("✅ Success email sent for order:", externalOrderId);
   } catch (error) {
     console.error("❌ Error sending success email:", error);
     throw error;
-  }
-};
-
-const sendFailedPaymentEmailForOrder = async (
-  externalOrderId: string,
-  paymentDetails: any
-): Promise<void> => {
-  try {
-    // Get pending payment data from memory
-    const bookingData = pendingPayments.get(externalOrderId);
-
-    if (!bookingData) {
-      console.warn(
-        "⚠️ No pending payment data found for failed order:",
-        externalOrderId
-      );
-      return;
-    }
-
-    const failedPaymentDetails = {
-      customerFirstName: bookingData.firstName,
-      customerLastName: bookingData.lastName,
-      customerEmail: bookingData.email,
-      tourName: bookingData.tourName,
-      selectedDate: new Date(bookingData.selectedDate).toISOString(),
-      peopleAmount: bookingData.peopleAmount,
-      totalTourPrice: Number(bookingData.totalTourPrice),
-      amountPaid: Number(bookingData.paymentAmount),
-      externalOrderId: externalOrderId,
-      failureReason:
-        paymentDetails.reject_reason || paymentDetails.order_status.value,
-      paymentStatus: paymentDetails.order_status.key,
-    };
-
-    await sendFailedPaymentEmail(failedPaymentDetails);
-
-    console.log("✅ Failed payment email sent for order:", externalOrderId);
-
-    // Clean up pending payment data after sending email
-    pendingPayments.delete(externalOrderId);
-  } catch (error) {
-    console.error("❌ Error sending failed payment email:", error);
   }
 };
