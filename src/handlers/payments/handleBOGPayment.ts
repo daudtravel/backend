@@ -54,6 +54,7 @@ export const handleBOGPayment = async (
 ): Promise<void> => {
   try {
     const { bookingData }: PaymentRequest = req.body;
+ 
 
     if (!bookingData) {
       res.status(400).json({

@@ -56,12 +56,9 @@ export const handleBOGCallback = async (
         return;
       }
     } else {
-      // Signature header missing - you may want to reject or allow based on your security policy
       res.status(400).json({ error: "Missing signature header" });
       return;
     }
-
-    // Parse JSON after successful signature verification
     const callbackData = JSON.parse(rawBody);
 
     if (!callbackData.event || callbackData.event !== "order_payment") {
