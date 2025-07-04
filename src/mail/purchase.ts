@@ -8,13 +8,14 @@ interface BookingData {
 
 // Option 1: Using Gmail service (simpler - no host needed)
 const transporter = nodemailer.createTransport({
-  service: "gmail", // This automatically sets host, port, and secure
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
   auth: {
-    user: process.env.GMAIL_USER, // your-email@gmail.com
-    pass: process.env.GMAIL_APP_PASSWORD, // 16-character app password
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASSWORD,
   },
 });
-
 
 export const sendBookingConfirmationEmail = async (
   bookingData: BookingData

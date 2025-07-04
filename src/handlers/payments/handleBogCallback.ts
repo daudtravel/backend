@@ -1,7 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import pool from "../../config/sql";
-import { sendBookingConfirmationEmail } from "../../mail/purchase";
+import { sendPaymentSuccessEmail } from "../../mail/success";
+import { sendPaymentFailureEmail } from "../../mail/failure";
+import { sendPaymentRefundEmail } from "../../mail/refund";
 
 const BOG_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu4RUyAw3+CdkS3ZNILQh
@@ -223,9 +225,7 @@ export const handleBOGCallback = async (
 
   console.log("🎯 ===== BOG CALLBACK COMPLETE =====\n");
 };
- 
 
-// Also update the handlePaymentSuccess function:
 async function handlePaymentSuccess(orderData: any) {
   try {
     console.log("💳 Processing payment success for order:", orderData.order_id);
@@ -247,8 +247,7 @@ async function handlePaymentSuccess(orderData: any) {
     const values = [
       orderData.payment_detail?.transaction_id,
       orderData.payment_detail?.transfer_method?.key,
-      // Fix this line:
-      orderData.purchase_units?.request_amount, // Changed from total_amount
+      orderData.purchase_units?.request_amount,
       JSON.stringify(orderData),
       orderData.order_id,
     ];
@@ -263,6 +262,24 @@ async function handlePaymentSuccess(orderData: any) {
       );
     } else {
       console.log("✅ Payment success recorded in database:", rows[0].id);
+
+      // Send success email
+      const successOrder = rows[0];
+      const firstName = successOrder.customer_first_name || "Customer";
+      const lastName = successOrder.customer_last_name || "";
+      const email = successOrder.customer_email || "";
+
+      if (email) {
+        console.log("📧 Sending success email to:", email);
+        await sendPaymentSuccessEmail({
+          firstName,
+          lastName,
+          email,
+          orderId: orderData.order_id,
+          amount: orderData.purchase_units?.request_amount,
+          transactionId: orderData.payment_detail?.transaction_id,
+        });
+      }
     }
   } catch (error) {
     console.error("❌ Database error during payment success:", error);
@@ -298,16 +315,19 @@ async function handlePaymentFailure(orderData: any) {
       console.log("✅ Payment failure recorded in database:", rows[0].id);
 
       const failedOrder = rows[0];
-      const firstname = failedOrder.customer_first_name || "Customer";
-      const lastname = failedOrder.customer_last_name || "";
+      const firstName = failedOrder.customer_first_name || "Customer";
+      const lastName = failedOrder.customer_last_name || "";
       const email = failedOrder.customer_email || "";
 
       if (email) {
-        console.log("📧 Sending failure notification email to:", email);
-        await sendBookingConfirmationEmail({
-          firstName: firstname,
-          lastName: lastname,
-          email: email,
+        console.log("📧 Sending failure email to:", email);
+        await sendPaymentFailureEmail({
+          firstName,
+          lastName,
+          email,
+          orderId: orderData.order_id,
+          amount: orderData.purchase_units?.request_amount,
+          rejectionReason: orderData.reject_reason,
         });
       }
     } else {
@@ -348,6 +368,24 @@ async function handlePaymentRefund(orderData: any) {
 
     if (rows.length > 0) {
       console.log("✅ Payment refund recorded in database:", rows[0].id);
+
+      // Send refund email
+      const refundOrder = rows[0];
+      const firstName = refundOrder.customer_first_name || "Customer";
+      const lastName = refundOrder.customer_last_name || "";
+      const email = refundOrder.customer_email || "";
+
+      if (email) {
+        console.log("📧 Sending refund email to:", email);
+        await sendPaymentRefundEmail({
+          firstName,
+          lastName,
+          email,
+          orderId: orderData.order_id,
+          amount: orderData.purchase_units?.refund_amount,
+          transactionId: orderData.payment_detail?.transaction_id,
+        });
+      }
     } else {
       console.error(
         "❌ Payment record not found for refund update:",
