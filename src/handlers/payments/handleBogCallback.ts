@@ -44,39 +44,6 @@ function verifyBOGSignature(body: string, signature: string): boolean {
   }
 }
 
-// Enhanced middleware to capture raw body
-export const rawBodyMiddleware = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  console.log("🔍 Raw body middleware triggered");
-  console.log("  Content-Type:", req.get("Content-Type"));
-  console.log("  Content-Length:", req.get("Content-Length"));
-
-  let data = "";
-  req.setEncoding("utf8");
-
-  req.on("data", (chunk) => {
-    console.log("📥 Receiving chunk:", chunk.length, "bytes");
-    data += chunk;
-  });
-
-  req.on("end", () => {
-    console.log("✅ Raw body capture complete:");
-    console.log("  Total length:", data.length);
-    console.log("  Raw body sample:", data.substring(0, 200) + "...");
-
-    (req as any).rawBody = data;
-    next();
-  });
-
-  req.on("error", (error) => {
-    console.error("❌ Error reading request body:", error);
-    next(error);
-  });
-};
-
 export const handleBOGCallback = async (
   req: Request,
   res: Response
@@ -96,21 +63,25 @@ export const handleBOGCallback = async (
     // Log query parameters
     console.log("🔍 Query Parameters:", req.query);
 
-    // Log parsed body (if any)
-    console.log("📦 Parsed Body:", req.body);
+    // Get raw body - Express raw middleware gives us a Buffer
+    let rawBody: string;
 
-    // Get raw body
-    const rawBody = (req as any).rawBody as string;
+    if (Buffer.isBuffer(req.body)) {
+      rawBody = req.body.toString("utf8");
+      console.log("📦 Raw Body (from Buffer):", rawBody.substring(0, 500));
+    } else if (typeof req.body === "string") {
+      rawBody = req.body;
+      console.log("📦 Raw Body (string):", rawBody.substring(0, 500));
+    } else {
+      // Fallback to JSON.stringify if body is already parsed
+      rawBody = JSON.stringify(req.body);
+      console.log("📦 Raw Body (JSON stringified):", rawBody.substring(0, 500));
+    }
+
     console.log("\n🔍 Raw Body Analysis:");
     console.log("  Type:", typeof rawBody);
     console.log("  Length:", rawBody ? rawBody.length : 0);
     console.log("  Is defined:", rawBody !== undefined);
-    console.log("  Is null:", rawBody === null);
-    console.log("  Is empty string:", rawBody === "");
-
-    if (rawBody) {
-      console.log("  Sample (first 500 chars):", rawBody.substring(0, 500));
-    }
 
     // Get signature from headers
     const signature = req.headers["callback-signature"] as string;
@@ -135,21 +106,10 @@ export const handleBOGCallback = async (
       }
     });
 
-    // If no raw body, try to use req.body
-    let bodyToVerify = rawBody;
-    if (!bodyToVerify && req.body) {
-      bodyToVerify =
-        typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-      console.log(
-        "⚠️  Using parsed body as fallback:",
-        bodyToVerify.substring(0, 200)
-      );
-    }
-
     // Signature verification
-    if (signature && bodyToVerify) {
+    if (signature && rawBody) {
       console.log("\n🔐 Attempting signature verification...");
-      const isValidSignature = verifyBOGSignature(bodyToVerify, signature);
+      const isValidSignature = verifyBOGSignature(rawBody, signature);
 
       if (!isValidSignature) {
         console.error("❌ Signature verification failed");
@@ -160,7 +120,7 @@ export const handleBOGCallback = async (
     } else {
       console.log("\n⚠️  Signature verification skipped:");
       console.log("  Has signature:", !!signature);
-      console.log("  Has body:", !!bodyToVerify);
+      console.log("  Has body:", !!rawBody);
 
       // For development, you might want to comment out this return
       // res.status(400).json({ error: "Missing signature header or body" });
@@ -170,22 +130,12 @@ export const handleBOGCallback = async (
     // Parse callback data
     let callbackData: any;
     try {
-      if (bodyToVerify) {
-        callbackData = JSON.parse(bodyToVerify);
-      } else if (req.body) {
-        callbackData = req.body;
-      } else {
-        throw new Error("No body data available");
-      }
-
+      callbackData = JSON.parse(rawBody);
       console.log("\n📋 Parsed Callback Data:");
       console.log(JSON.stringify(callbackData, null, 2));
     } catch (parseError) {
       console.error("❌ Failed to parse callback data:", parseError);
-      console.log(
-        "📝 Raw data that failed to parse:",
-        bodyToVerify || req.body
-      );
+      console.log("📝 Raw data that failed to parse:", rawBody);
       res.status(400).json({ error: "Invalid JSON in callback data" });
       return;
     }

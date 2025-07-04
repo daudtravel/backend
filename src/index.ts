@@ -27,19 +27,29 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // Move this after
+app.options("*", cors(corsOptions));
 
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
-app.use(express.raw({ limit: "50mb" }));
+// Raw body middleware for specific routes that need signature verification
+app.use(
+  "/api/payments/bog/callback",
+  express.raw({ type: "application/json" })
+);
 
+// Regular JSON parsing for all other routes
 app.use(
   express.json({
     limit: "50mb",
     verify: (req, res, buf) => {
-      (req as any).rawBody = buf.toString();
+      // Only set rawBody for non-callback routes
+      if (!req.url?.includes("/payments/bog/callback")) {
+        (req as any).rawBody = buf.toString();
+      }
     },
   })
 );
+
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
 app.use("/api", router);
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(express.static("./src/public"));
