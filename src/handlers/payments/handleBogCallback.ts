@@ -223,7 +223,9 @@ export const handleBOGCallback = async (
 
   console.log("🎯 ===== BOG CALLBACK COMPLETE =====\n");
 };
+ 
 
+// Also update the handlePaymentSuccess function:
 async function handlePaymentSuccess(orderData: any) {
   try {
     console.log("💳 Processing payment success for order:", orderData.order_id);
@@ -245,7 +247,8 @@ async function handlePaymentSuccess(orderData: any) {
     const values = [
       orderData.payment_detail?.transaction_id,
       orderData.payment_detail?.transfer_method?.key,
-      orderData.purchase_units?.total_amount,
+      // Fix this line:
+      orderData.purchase_units?.request_amount, // Changed from total_amount
       JSON.stringify(orderData),
       orderData.order_id,
     ];
