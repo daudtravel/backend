@@ -124,13 +124,18 @@ export const resendVerificationCode = async (email: string, code: string) => {
       const createdAt = new Date(result.rows[0].created_at);
       const now = new Date();
       const timeDiff = now.getTime() - createdAt.getTime();
-      const minutesLeft = Math.ceil((15 * 60 * 1000 - timeDiff) / (60 * 1000));
+      const timeElapsedSeconds = Math.floor(timeDiff / 1000);
+      const cooldownSeconds = 2 * 60; // 2 minutes cooldown
 
-      if (minutesLeft > 13) {
-        // Allow resend only if less than 2 minutes have passed
-        throw new Error(
-          `Please wait ${minutesLeft} minutes before requesting a new code`
-        );
+      if (timeElapsedSeconds < cooldownSeconds) {
+        // Calculate time remaining in seconds
+        const timeRemaining = cooldownSeconds - timeElapsedSeconds;
+
+        // Create a custom error with status and timeRemaining
+        const error = new Error("VERIFICATION_CODE_ALREADY_SENT");
+        (error as any).status = 429; // Too Many Requests
+        (error as any).timeRemaining = timeRemaining;
+        throw error;
       }
     }
 

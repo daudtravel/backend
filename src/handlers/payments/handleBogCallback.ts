@@ -260,8 +260,17 @@ async function handlePaymentSuccess(orderData: any) {
         "❌ Payment record not found in database for order:",
         orderData.order_id
       );
+      console.log("🔍 DEBUG: No rows returned from database update");
+      return;
     } else {
       console.log("✅ Payment success recorded in database:", rows[0].id);
+      console.log("📋 Database record details:", {
+        id: rows[0].id,
+        customer_email: rows[0].customer_email,
+        customer_first_name: rows[0].customer_first_name,
+        customer_last_name: rows[0].customer_last_name,
+        status: rows[0].status,
+      });
 
       // Send success email
       const successOrder = rows[0];
@@ -269,20 +278,76 @@ async function handlePaymentSuccess(orderData: any) {
       const lastName = successOrder.customer_last_name || "";
       const email = successOrder.customer_email || "";
 
+      console.log("📧 EMAIL PREPARATION:");
+      console.log("  Customer First Name:", firstName);
+      console.log("  Customer Last Name:", lastName);
+      console.log("  Customer Email:", email);
+      console.log("  Email exists:", !!email);
+      console.log(
+        "  Email is valid string:",
+        typeof email === "string" && email.length > 0
+      );
+
       if (email) {
-        console.log("📧 Sending success email to:", email);
-        await sendPaymentSuccessEmail({
+        console.log("📧 Preparing to send success email to:", email);
+
+        const emailData = {
           firstName,
           lastName,
           email,
           orderId: orderData.order_id,
           amount: orderData.purchase_units?.request_amount,
           transactionId: orderData.payment_detail?.transaction_id,
+        };
+
+        console.log("📧 Email data prepared:", emailData);
+
+        try {
+          console.log("📧 Calling sendPaymentSuccessEmail function...");
+          const emailResult = await sendPaymentSuccessEmail(emailData);
+          console.log("✅ SUCCESS EMAIL SENT SUCCESSFULLY:", emailResult);
+        } catch (emailError) {
+          console.error("❌ SUCCESS EMAIL SENDING FAILED:");
+          console.error(
+            "  Error type:",
+            emailError instanceof Error
+              ? emailError.constructor.name
+              : typeof emailError
+          );
+          console.error(
+            "  Error message:",
+            emailError instanceof Error ? emailError.message : emailError
+          );
+          console.error(
+            "  Error stack:",
+            emailError instanceof Error ? emailError.stack : "No stack trace"
+          );
+        }
+      } else {
+        console.log("⚠️  SUCCESS EMAIL NOT SENT - No email address found");
+        console.log("  Email value:", email);
+        console.log("  Email type:", typeof email);
+        console.log("  Customer data from DB:", {
+          customer_email: successOrder.customer_email,
+          customer_first_name: successOrder.customer_first_name,
+          customer_last_name: successOrder.customer_last_name,
         });
       }
     }
   } catch (error) {
     console.error("❌ Database error during payment success:", error);
+    console.error(
+      "  Error type:",
+      error instanceof Error ? error.constructor.name : typeof error
+    );
+    console.error(
+      "  Error message:",
+      error instanceof Error ? error.message : error
+    );
+    console.error(
+      "  Error stack:",
+      error instanceof Error ? error.stack : "No stack trace"
+    );
   }
 }
 
@@ -313,21 +378,72 @@ async function handlePaymentFailure(orderData: any) {
 
     if (rows.length > 0) {
       console.log("✅ Payment failure recorded in database:", rows[0].id);
+      console.log("📋 Database record details:", {
+        id: rows[0].id,
+        customer_email: rows[0].customer_email,
+        customer_first_name: rows[0].customer_first_name,
+        customer_last_name: rows[0].customer_last_name,
+        status: rows[0].status,
+      });
 
       const failedOrder = rows[0];
       const firstName = failedOrder.customer_first_name || "Customer";
       const lastName = failedOrder.customer_last_name || "";
       const email = failedOrder.customer_email || "";
 
+      console.log("📧 FAILURE EMAIL PREPARATION:");
+      console.log("  Customer First Name:", firstName);
+      console.log("  Customer Last Name:", lastName);
+      console.log("  Customer Email:", email);
+      console.log("  Email exists:", !!email);
+      console.log(
+        "  Email is valid string:",
+        typeof email === "string" && email.length > 0
+      );
+
       if (email) {
-        console.log("📧 Sending failure email to:", email);
-        await sendPaymentFailureEmail({
+        console.log("📧 Preparing to send failure email to:", email);
+
+        const emailData = {
           firstName,
           lastName,
           email,
           orderId: orderData.order_id,
           amount: orderData.purchase_units?.request_amount,
           rejectionReason: orderData.reject_reason,
+        };
+
+        console.log("📧 Email data prepared:", emailData);
+
+        try {
+          console.log("📧 Calling sendPaymentFailureEmail function...");
+          const emailResult = await sendPaymentFailureEmail(emailData);
+          console.log("✅ FAILURE EMAIL SENT SUCCESSFULLY:", emailResult);
+        } catch (emailError) {
+          console.error("❌ FAILURE EMAIL SENDING FAILED:");
+          console.error(
+            "  Error type:",
+            emailError instanceof Error
+              ? emailError.constructor.name
+              : typeof emailError
+          );
+          console.error(
+            "  Error message:",
+            emailError instanceof Error ? emailError.message : emailError
+          );
+          console.error(
+            "  Error stack:",
+            emailError instanceof Error ? emailError.stack : "No stack trace"
+          );
+        }
+      } else {
+        console.log("⚠️  FAILURE EMAIL NOT SENT - No email address found");
+        console.log("  Email value:", email);
+        console.log("  Email type:", typeof email);
+        console.log("  Customer data from DB:", {
+          customer_email: failedOrder.customer_email,
+          customer_first_name: failedOrder.customer_first_name,
+          customer_last_name: failedOrder.customer_last_name,
         });
       }
     } else {
@@ -335,9 +451,24 @@ async function handlePaymentFailure(orderData: any) {
         "❌ Payment record not found for failure update:",
         orderData.order_id
       );
+      console.log(
+        "🔍 DEBUG: No rows returned from database update for failure"
+      );
     }
   } catch (error) {
     console.error("❌ Database error during payment failure:", error);
+    console.error(
+      "  Error type:",
+      error instanceof Error ? error.constructor.name : typeof error
+    );
+    console.error(
+      "  Error message:",
+      error instanceof Error ? error.message : error
+    );
+    console.error(
+      "  Error stack:",
+      error instanceof Error ? error.stack : "No stack trace"
+    );
   }
 }
 
@@ -368,6 +499,13 @@ async function handlePaymentRefund(orderData: any) {
 
     if (rows.length > 0) {
       console.log("✅ Payment refund recorded in database:", rows[0].id);
+      console.log("📋 Database record details:", {
+        id: rows[0].id,
+        customer_email: rows[0].customer_email,
+        customer_first_name: rows[0].customer_first_name,
+        customer_last_name: rows[0].customer_last_name,
+        status: rows[0].status,
+      });
 
       // Send refund email
       const refundOrder = rows[0];
@@ -375,15 +513,59 @@ async function handlePaymentRefund(orderData: any) {
       const lastName = refundOrder.customer_last_name || "";
       const email = refundOrder.customer_email || "";
 
+      console.log("📧 REFUND EMAIL PREPARATION:");
+      console.log("  Customer First Name:", firstName);
+      console.log("  Customer Last Name:", lastName);
+      console.log("  Customer Email:", email);
+      console.log("  Email exists:", !!email);
+      console.log(
+        "  Email is valid string:",
+        typeof email === "string" && email.length > 0
+      );
+
       if (email) {
-        console.log("📧 Sending refund email to:", email);
-        await sendPaymentRefundEmail({
+        console.log("📧 Preparing to send refund email to:", email);
+
+        const emailData = {
           firstName,
           lastName,
           email,
           orderId: orderData.order_id,
           amount: orderData.purchase_units?.refund_amount,
           transactionId: orderData.payment_detail?.transaction_id,
+        };
+
+        console.log("📧 Email data prepared:", emailData);
+
+        try {
+          console.log("📧 Calling sendPaymentRefundEmail function...");
+          const emailResult = await sendPaymentRefundEmail(emailData);
+          console.log("✅ REFUND EMAIL SENT SUCCESSFULLY:", emailResult);
+        } catch (emailError) {
+          console.error("❌ REFUND EMAIL SENDING FAILED:");
+          console.error(
+            "  Error type:",
+            emailError instanceof Error
+              ? emailError.constructor.name
+              : typeof emailError
+          );
+          console.error(
+            "  Error message:",
+            emailError instanceof Error ? emailError.message : emailError
+          );
+          console.error(
+            "  Error stack:",
+            emailError instanceof Error ? emailError.stack : "No stack trace"
+          );
+        }
+      } else {
+        console.log("⚠️  REFUND EMAIL NOT SENT - No email address found");
+        console.log("  Email value:", email);
+        console.log("  Email type:", typeof email);
+        console.log("  Customer data from DB:", {
+          customer_email: refundOrder.customer_email,
+          customer_first_name: refundOrder.customer_first_name,
+          customer_last_name: refundOrder.customer_last_name,
         });
       }
     } else {
@@ -391,9 +573,22 @@ async function handlePaymentRefund(orderData: any) {
         "❌ Payment record not found for refund update:",
         orderData.order_id
       );
+      console.log("🔍 DEBUG: No rows returned from database update for refund");
     }
   } catch (error) {
     console.error("❌ Database error during refund:", error);
+    console.error(
+      "  Error type:",
+      error instanceof Error ? error.constructor.name : typeof error
+    );
+    console.error(
+      "  Error message:",
+      error instanceof Error ? error.message : error
+    );
+    console.error(
+      "  Error stack:",
+      error instanceof Error ? error.stack : "No stack trace"
+    );
   }
 }
 
@@ -427,13 +622,33 @@ async function handleOtherStatus(orderData: any) {
 
     if (rows.length > 0) {
       console.log("✅ Status update recorded in database:", rows[0].id);
+      console.log("📋 Database record details:", {
+        id: rows[0].id,
+        customer_email: rows[0].customer_email,
+        status: rows[0].status,
+      });
     } else {
       console.error(
         "❌ Payment record not found for status update:",
         orderData.order_id
       );
+      console.log(
+        "🔍 DEBUG: No rows returned from database update for other status"
+      );
     }
   } catch (error) {
     console.error("❌ Database error during status update:", error);
+    console.error(
+      "  Error type:",
+      error instanceof Error ? error.constructor.name : typeof error
+    );
+    console.error(
+      "  Error message:",
+      error instanceof Error ? error.message : error
+    );
+    console.error(
+      "  Error stack:",
+      error instanceof Error ? error.stack : "No stack trace"
+    );
   }
 }

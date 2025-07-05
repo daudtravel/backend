@@ -28,14 +28,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
-
-// Raw body middleware for specific routes that need signature verification
 app.use(
   "/api/payments/bog/callback",
   express.raw({ type: "application/json" })
 );
 
-// Regular JSON parsing for all other routes
 app.use(
   express.json({
     limit: "50mb",

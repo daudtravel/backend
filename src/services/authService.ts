@@ -40,19 +40,26 @@ export const checkPendingVerification = async (
   const currentTime = new Date();
   const codeCreatedAt = new Date(codeEntry.created_at);
   const timeDiff = currentTime.getTime() - codeCreatedAt.getTime();
-  const minutesDiff = timeDiff / (1000 * 60);
+  const secondsDiff = Math.floor(timeDiff / 1000);
 
-  if (minutesDiff < 15) {
-    return {
-      exists: true,
-      timeRemaining: Math.ceil(15 - minutesDiff),
-    };
-  } else {
+  // Check if code is expired (15 minutes = 900 seconds)
+  if (secondsDiff >= 900) {
     await pool.query("DELETE FROM email_verification WHERE email = $1", [
       email,
     ]);
     return { exists: false };
   }
+
+  // Check if we're within cooldown period (1 minute = 60 seconds)
+  if (secondsDiff < 60) {
+    return {
+      exists: true,
+      timeRemaining: 60 - secondsDiff, // Return remaining seconds
+    };
+  }
+
+  // Code exists but cooldown period has passed, allow resending
+  return { exists: false };
 };
 
 export const sendVerificationCodeService = async (
@@ -71,7 +78,7 @@ export const sendVerificationCodeService = async (
 
   if (pendingCheck.exists) {
     throw {
-      status: 400,
+      status: 429, // Changed from 400 to 429 (Too Many Requests)
       message: "VERIFICATION_CODE_ALREADY_SENT",
       timeRemaining: pendingCheck.timeRemaining,
     };
