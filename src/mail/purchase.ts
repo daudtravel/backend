@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 interface BookingData {
   firstName: string;
@@ -6,16 +6,8 @@ interface BookingData {
   email: string;
 }
 
-// Option 1: Using Gmail service (simpler - no host needed)
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASSWORD,
-  },
-});
+// Initialize Resend transporter
+const transporter = new Resend(process.env.RESEND_API_KEY!);
 
 export const sendBookingConfirmationEmail = async (
   bookingData: BookingData
@@ -41,15 +33,20 @@ export const sendBookingConfirmationEmail = async (
       </div>
     `;
 
-    await transporter.sendMail({
-      from: process.env.GMAIL_USER || "noreply@yourdomain.com",
+    const { data, error } = await transporter.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
       to: email,
       subject,
       text,
       html,
     });
 
-    console.log(`✅ Booking confirmation email sent to ${email}`);
+    if (error) {
+      console.error("❌ Error sending booking confirmation email:", error);
+      throw error;
+    }
+
+    console.log(`✅ Booking confirmation email sent to ${email}`, data?.id);
   } catch (error) {
     console.error("❌ Error sending booking confirmation email:", error);
     throw error;
@@ -59,11 +56,14 @@ export const sendBookingConfirmationEmail = async (
 // Optional: Verify transporter connection
 export const verifyEmailConnection = async (): Promise<boolean> => {
   try {
-    await transporter.verify();
-    console.log("✅ Gmail SMTP connection verified");
+    if (!process.env.RESEND_API_KEY) {
+      console.error("❌ RESEND_API_KEY not set");
+      return false;
+    }
+    console.log("✅ Resend connection verified");
     return true;
   } catch (error) {
-    console.error("❌ Gmail SMTP verification failed:", error);
+    console.error("❌ Resend verification failed:", error);
     return false;
   }
 };

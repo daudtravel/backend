@@ -3,8 +3,8 @@ import pool from "../config/sql";
 
 export const sendVerificationEmail = async (email: string, code: string) => {
   try {
-    await transporter.sendMail({
-      from: '"Daud Travel" <noreply@daudtravel.com>',
+    const { data, error } = await transporter.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
       to: email,
       subject: "Verify Your Daud Travel Account",
       html: `
@@ -58,7 +58,12 @@ export const sendVerificationEmail = async (email: string, code: string) => {
       `,
     });
 
-    console.log(`✅ Verification email sent to ${email}`);
+    if (error) {
+      console.error(`❌ Failed to send verification email to ${email}`, error);
+      throw new Error("Failed to send verification email. Please try again.");
+    }
+
+    console.log(`✅ Verification email sent to ${email}`, data?.id);
   } catch (error) {
     console.error(`❌ Failed to send verification email to ${email}`, error);
     throw new Error("Failed to send verification email. Please try again.");

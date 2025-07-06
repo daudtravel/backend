@@ -5,6 +5,7 @@ import cors from "cors";
 import { initDatabase } from "./database/db.init";
 import path from "path";
 import pool from "./config/sql";
+import { sendPaymentFailureEmail } from "./mail/failure";
 
 dotenv.config();
 
@@ -77,6 +78,8 @@ const startServer = async (): Promise<void> => {
     process.exit(1);
   }
 };
+
+ 
 
 startServer();
 

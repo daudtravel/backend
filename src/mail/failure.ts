@@ -73,15 +73,22 @@ Your Booking Team`;
         </div>
       </div>
     `;
-    console.log("📧 About to send email via nodemailer...");
-    const info = await transporter.sendMail({
-      from: process.env.GMAIL_USER || "noreply@yourdomain.com",
+
+    console.log("📧 About to send email via Resend...");
+    const { data, error } = await transporter.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
       to: email,
       subject,
       text,
       html,
     });
-    console.log("✅ Nodemailer sendMail resolved! Info:", info);
+
+    if (error) {
+      console.error("❌ Error sending payment failure email:", error);
+      throw error;
+    }
+
+    console.log("✅ Resend email sent successfully! Info:", data?.id);
   } catch (error) {
     console.error("❌ Error sending payment failure email:", error);
     throw error;

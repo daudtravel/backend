@@ -62,17 +62,21 @@ Your Booking Team`;
       </div>
     `;
 
-    await transporter.sendMail({
-      from: process.env.GMAIL_USER || "noreply@yourdomain.com",
+    console.log("📧 About to send success email via Resend...");
+    const { data, error } = await transporter.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
       to: email,
       subject,
       text,
       html,
     });
 
-    console.log(
-      `✅ Payment success email sent to ${email} for order ${orderId}`
-    );
+    if (error) {
+      console.error("❌ Error sending payment success email:", error);
+      throw error;
+    }
+
+    console.log("✅ Resend success email sent successfully! Info:", data?.id);
   } catch (error) {
     console.error("❌ Error sending payment success email:", error);
     throw error;

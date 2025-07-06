@@ -1,24 +1,19 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 // Email transporter configuration
-export const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASSWORD,
-  },
-});
+export const transporter = new Resend(process.env.RESEND_API_KEY!);
 
 // Optional: Verify transporter connection
 export const verifyEmailConnection = async (): Promise<boolean> => {
   try {
-    await transporter.verify();
-    console.log("✅ Gmail SMTP connection verified");
+    if (!process.env.RESEND_API_KEY) {
+      console.error("❌ RESEND_API_KEY not set");
+      return false;
+    }
+    console.log("✅ Resend connection verified");
     return true;
   } catch (error) {
-    console.error("❌ Gmail SMTP verification failed:", error);
+    console.error("❌ Resend verification failed:", error);
     return false;
   }
 };
