@@ -4,7 +4,7 @@ import pool from "../config/sql";
 export const sendVerificationEmail = async (email: string, code: string) => {
   try {
     const { data, error } = await transporter.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
+      from: process.env.RESEND_FROM_EMAIL || "traveldaud@gmail.com",
       to: email,
       subject: "Verify Your Daud Travel Account",
       html: `
@@ -82,7 +82,6 @@ export const storeVerificationCode = async (email: string, code: string) => {
 
   try {
     await pool.query(query, [email, code]);
-    console.log(`✅ Verification code stored for ${email}`);
   } catch (error) {
     console.error("❌ Error storing verification code:", error);
     throw new Error("Failed to store verification code");
@@ -99,24 +98,21 @@ export const verifyEmailCode = async (email: string, code: string) => {
   try {
     const result = await pool.query(query, [email, code]);
     if (result.rows.length > 0) {
-      // Delete the used verification code
       await pool.query("DELETE FROM email_verification WHERE email = $1", [
         email,
       ]);
-      console.log(`✅ Email verification successful for ${email}`);
+
       return true;
     }
-    console.log(`❌ Invalid or expired verification code for ${email}`);
+
     return false;
   } catch (error) {
-    console.error("❌ Error verifying email code:", error);
     throw new Error("Failed to verify email code");
   }
 };
 
 export const resendVerificationCode = async (email: string, code: string) => {
   try {
-    // Check if there's an existing code that's not expired
     const checkQuery = `
       SELECT created_at FROM email_verification 
       WHERE email = $1 
@@ -130,25 +126,18 @@ export const resendVerificationCode = async (email: string, code: string) => {
       const now = new Date();
       const timeDiff = now.getTime() - createdAt.getTime();
       const timeElapsedSeconds = Math.floor(timeDiff / 1000);
-      const cooldownSeconds = 2 * 60; // 2 minutes cooldown
+      const cooldownSeconds = 2 * 60;
 
       if (timeElapsedSeconds < cooldownSeconds) {
-        // Calculate time remaining in seconds
         const timeRemaining = cooldownSeconds - timeElapsedSeconds;
-
-        // Create a custom error with status and timeRemaining
         const error = new Error("VERIFICATION_CODE_ALREADY_SENT");
-        (error as any).status = 429; // Too Many Requests
+        (error as any).status = 429;
         (error as any).timeRemaining = timeRemaining;
         throw error;
       }
     }
-
-    // Store new code and send email
     await storeVerificationCode(email, code);
     await sendVerificationEmail(email, code);
-
-    console.log(`✅ Verification code resent to ${email}`);
   } catch (error) {
     console.error("❌ Error resending verification code:", error);
     throw error;
@@ -162,8 +151,7 @@ export const cleanupExpiredCodes = async () => {
   `;
 
   try {
-    const result = await pool.query(query);
-    console.log(`✅ Cleaned up ${result.rowCount} expired verification codes`);
+    await pool.query(query);
   } catch (error) {
     console.error("❌ Error cleaning up expired codes:", error);
   }

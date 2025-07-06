@@ -5,7 +5,7 @@ import {
   sendVerificationEmail,
   storeVerificationCode,
   verifyEmailCode,
-} from "../mail";
+} from "../mail/signup";
 import jwt from "jsonwebtoken";
 import {
   User,

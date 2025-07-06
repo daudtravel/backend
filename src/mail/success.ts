@@ -1,68 +1,23 @@
 import { transporter, EmailData } from "./config";
 
 export const sendPaymentSuccessEmail = async (
-  emailData: EmailData
+  emailData: EmailData & { detailsLink: string }
 ): Promise<void> => {
   try {
-    const { firstName, lastName, email, orderId, amount, transactionId } =
-      emailData;
+    const { firstName, lastName, email, detailsLink } = emailData;
+    const subject = "Tour Purchase Confirmation 🎉";
+    const message =
+      "Congratulations! You’ve purchased our tour. You can view all the details using the link below:";
 
-    const subject = "Payment Successful - Booking Confirmed! 🎉";
-
-    const text = `Dear ${firstName} ${lastName},
-
-Great news! Your payment has been successfully processed and your booking is now confirmed.
-
-Order Details:
-- Order ID: ${orderId || "N/A"}
-- Transaction ID: ${transactionId || "N/A"}
-- Amount: ${amount ? `$${amount}` : "N/A"}
-
-Thank you for your business!
-
-Best regards,
-Your Booking Team`;
+    const text = `${message}\n\n${detailsLink}`;
 
     const html = `
-      <div style="font-family: Arial, sans-serif; font-size: 16px; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px;">
-          <h2 style="color: #28a745; margin-top: 0;">Payment Successful! 🎉</h2>
-          <p>Dear <strong>${firstName} ${lastName}</strong>,</p>
-          <p>Great news! Your payment has been successfully processed and your booking is now confirmed.</p>
-          
-          <div style="background-color: white; padding: 20px; border-radius: 4px; margin: 20px 0; border-left: 4px solid #28a745;">
-            <h3 style="color: #28a745; margin-top: 0;">Order Details</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold;">Order ID:</td>
-                <td style="padding: 8px 0;">${orderId || "N/A"}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold;">Transaction ID:</td>
-                <td style="padding: 8px 0;">${transactionId || "N/A"}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold;">Amount:</td>
-                <td style="padding: 8px 0; color: #28a745; font-weight: bold;">${
-                  amount ? `$${amount}` : "N/A"
-                }</td>
-              </tr>
-            </table>
-          </div>
-          
-          <div style="background-color: #e8f5e9; padding: 15px; border-radius: 4px; margin: 20px 0;">
-            <p style="margin: 0; color: #2e7d32;">
-              <strong>What's Next?</strong><br>
-              You will receive additional details about your booking shortly. If you have any questions, feel free to contact our support team.
-            </p>
-          </div>
-          
-          <p style="margin-bottom: 0;">Thank you for your business!<br><strong>Your Booking Team</strong></p>
-        </div>
+      <div style="font-family: Arial, sans-serif; font-size: 16px; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <p>${message}</p>
+        <p><a href="${detailsLink}" style="color: #1e88e5;" target="_blank">${detailsLink}</a></p>
+        <p>— ${firstName} ${lastName}</p>
       </div>
     `;
-
-    console.log("📧 About to send success email via Resend...");
     const { data, error } = await transporter.emails.send({
       from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
       to: email,
@@ -70,15 +25,12 @@ Your Booking Team`;
       text,
       html,
     });
-
     if (error) {
       console.error("❌ Error sending payment success email:", error);
       throw error;
     }
-
-    console.log("✅ Resend success email sent successfully! Info:", data?.id);
   } catch (error) {
-    console.error("❌ Error sending payment success email:", error);
+    console.error("❌ Error in sendPaymentSuccessEmail:", error);
     throw error;
   }
 };

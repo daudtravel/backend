@@ -54,7 +54,6 @@ export const handleBOGPayment = async (
 ): Promise<void> => {
   try {
     const { bookingData }: PaymentRequest = req.body;
- 
 
     if (!bookingData) {
       res.status(400).json({
@@ -155,8 +154,6 @@ export const handleBOGPayment = async (
       ttl: 30,
     };
 
-    let bogOrderData: any;
-
     const bogResponse = await fetch(`${BOG_API_URL}/orders`, {
       method: "POST",
       headers: {
@@ -170,87 +167,75 @@ export const handleBOGPayment = async (
 
     if (!bogResponse.ok) {
       const errorText = await bogResponse.text();
-      console.error("❌ BOG API Error:", {
-        status: bogResponse.status,
-        statusText: bogResponse.statusText,
-        body: errorText,
-      });
       throw new Error(
         `BOG API error: ${bogResponse.statusText} - ${errorText}`
       );
     }
 
-    bogOrderData = await bogResponse.json();
-
+    const bogOrderData = await bogResponse.json();
     const calculatedRemainingAmount = paymentType
       ? null
       : totalTourPrice - paymentAmount;
 
-    try {
-      const insertQuery = `
-        INSERT INTO payment_orders (
-          customer_first_name, 
-          customer_last_name, 
-          customer_email, 
-          customer_phone,
-          people_amount, 
-          selected_date, 
-          tour_duration_days, 
-          tour_duration_nights,
-          tour_name,
-          tour_description,
-          start_location,
-          end_location,
-          locations,
-          is_full_payment,
-          total_tour_price,
-          amount_paid,
-          amount_remaining,
-          external_order_id, 
-          bog_order_id, 
-          status,
-          payment_url,
-          expires_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-        RETURNING *;
-      `;
+    const insertQuery = `
+      INSERT INTO payment_orders (
+        customer_first_name, 
+        customer_last_name, 
+        customer_email, 
+        customer_phone,
+        people_amount, 
+        selected_date, 
+        tour_duration_days, 
+        tour_duration_nights,
+        tour_name,
+        tour_description,
+        start_location,
+        end_location,
+        locations,
+        is_full_payment,
+        total_tour_price,
+        amount_paid,
+        amount_remaining,
+        external_order_id, 
+        bog_order_id, 
+        status,
+        payment_url,
+        expires_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+      RETURNING *;
+    `;
 
-      const locationsToStore =
-        bookingData.locations && bookingData.locations.length > 0
-          ? JSON.stringify(bookingData.locations)
-          : null;
+    const locationsToStore =
+      bookingData.locations && bookingData.locations.length > 0
+        ? JSON.stringify(bookingData.locations)
+        : null;
 
-      const values = [
-        firstName,
-        lastName,
-        email,
-        phone,
-        peopleAmount,
-        new Date(selectedDate),
-        bookingData.tourDurationDays || 1,
-        bookingData.tourDurationNights || 0,
-        tourName,
-        cleanDescription,
-        bookingData.startLocation || null,
-        bookingData.endLocation || null,
-        locationsToStore,
-        paymentType,
-        Number(totalTourPrice),
-        Number(paymentAmount),
-        calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
-        external_order_id,
-        bogOrderData.id,
-        "pending",
-        bogOrderData._links.redirect.href,
-        new Date(Date.now() + 30 * 60 * 1000),
-      ];
+    const values = [
+      firstName,
+      lastName,
+      email,
+      phone,
+      peopleAmount,
+      new Date(selectedDate),
+      bookingData.tourDurationDays || 1,
+      bookingData.tourDurationNights || 0,
+      tourName,
+      cleanDescription,
+      bookingData.startLocation || null,
+      bookingData.endLocation || null,
+      locationsToStore,
+      paymentType,
+      Number(totalTourPrice),
+      Number(paymentAmount),
+      calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
+      external_order_id,
+      bogOrderData.id,
+      "pending",
+      bogOrderData._links.redirect.href,
+      new Date(Date.now() + 30 * 60 * 1000),
+    ];
 
-      const { rows } = await pool.query(insertQuery, values);
-    } catch (dbError) {
-      if (dbError instanceof Error) {
-        console.error("❌ Error details:", dbError.message);
-      }
-    }
+    await pool.query(insertQuery, values);
 
     res.status(201).json({
       success: true,
@@ -267,7 +252,6 @@ export const handleBOGPayment = async (
       status: "pending",
       expiresInMinutes: 30,
       createdAt: new Date().toISOString(),
-
       booking: {
         tourName: tourName,
         customerName: `${firstName} ${lastName}`,
@@ -277,7 +261,6 @@ export const handleBOGPayment = async (
       },
     });
   } catch (error) {
-    console.error("❌ Error creating BOG payment:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create payment",
