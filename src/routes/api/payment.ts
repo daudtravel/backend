@@ -8,10 +8,7 @@ import { getPaymentOrderById } from "../../handlers/payments/getPaymentByOrder";
 const bogPaymentsRouter = Router();
 
 bogPaymentsRouter.post("/payments/bog/create", handleBOGPayment);
-
-// Note: No need for rawBodyMiddleware here since we're handling it in app.js
 bogPaymentsRouter.post("/payments/bog/callback", handleBOGCallback);
-
 bogPaymentsRouter.get("/payments/bog/status/:order_id", getBOGPaymentStatus);
 bogPaymentsRouter.get("/orders", getPaymentOrder);
 bogPaymentsRouter.get("/orders/:id", getPaymentOrderById);
