@@ -41,15 +41,13 @@ const createCleanupFunction = async (): Promise<void> => {
     DECLARE
       deleted_count INTEGER;
     BEGIN
-      -- Delete orders that are pending and past their expiration time
       DELETE FROM payment_orders 
-      WHERE status = 'pending'
+      WHERE (status = 'pending' OR status = 'failed')
         AND expires_at IS NOT NULL
         AND expires_at < CURRENT_TIMESTAMP;
         
       GET DIAGNOSTICS deleted_count = ROW_COUNT;
         
-      -- Log the cleanup
       RAISE NOTICE 'Cleaned up % expired payment orders at %', deleted_count, CURRENT_TIMESTAMP;
         
       RETURN deleted_count;
@@ -58,14 +56,14 @@ const createCleanupFunction = async (): Promise<void> => {
   `;
 
   await pool.query(functionSQL);
-  console.log("✅ cleanup_expired_payment_orders function created");
+  console.log("✅ cleanup_expired_payment_orders function created or updated");
 };
 
 const manualCleanup = async (): Promise<number> => {
   try {
     const result = await pool.query(`
       DELETE FROM payment_orders 
-      WHERE status = 'pending'
+      WHERE (status = 'pending' OR status = 'failed')
         AND expires_at IS NOT NULL
         AND expires_at < CURRENT_TIMESTAMP
       RETURNING id;
@@ -77,6 +75,10 @@ const manualCleanup = async (): Promise<number> => {
       console.log(
         `🧹 Manually cleaned up ${deletedCount} expired payment orders`
       );
+    } else {
+      console.log(
+        "🧹 No expired failed or pending payment orders to clean up manually"
+      );
     }
 
     return deletedCount;
@@ -85,7 +87,6 @@ const manualCleanup = async (): Promise<number> => {
     return 0;
   }
 };
-
 export const startPaymentCleanup = (): void => {
   console.log("🕐 Starting automatic payment cleanup (every hour)");
 
