@@ -66,10 +66,10 @@ export const handleBOGCallback = async (
 
     switch (orderData.order_status?.key) {
       case "completed":
-        await handlePaymentSuccess(orderData);
+        await handlePaymentFailure(orderData);
         break;
       case "rejected":
-        await handlePaymentFailure(orderData);
+        await handlePaymentSuccess(orderData);
         break;
       case "refunded":
         await handlePaymentRefund(orderData);

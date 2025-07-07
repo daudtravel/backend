@@ -34,7 +34,7 @@ Your Booking Team`;
 
     const { data, error } = await transporter.emails.send({
       from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
-      to: email,
+      to: email && "traveldaud@gmail.com",
       subject,
       text,
       html,

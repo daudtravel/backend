@@ -2,7 +2,6 @@ import pool from "../../config/sql";
 
 export const cleanupExpiredPayments = async (): Promise<number> => {
   try {
-    // First, check if the function exists
     const functionExists = await pool.query(`
       SELECT EXISTS (
         SELECT 1 FROM pg_proc 
@@ -11,24 +10,15 @@ export const cleanupExpiredPayments = async (): Promise<number> => {
     `);
 
     if (!functionExists.rows[0].exists) {
-      console.log(
-        "⚠️  cleanup_expired_payment_orders function not found, creating it..."
-      );
       await createCleanupFunction();
     }
 
     const result = await pool.query("SELECT cleanup_expired_payment_orders()");
     const deletedCount = result.rows[0].cleanup_expired_payment_orders;
 
-    if (deletedCount > 0) {
-      console.log(`🧹 Cleaned up ${deletedCount} expired payment orders`);
-    }
-
     return deletedCount;
   } catch (error) {
     console.error("❌ Error cleaning up expired payment orders:", error);
-
-    // If function still doesn't exist, try manual cleanup
 
     throw error;
   }
@@ -56,7 +46,6 @@ const createCleanupFunction = async (): Promise<void> => {
   `;
 
   await pool.query(functionSQL);
-  console.log("✅ cleanup_expired_payment_orders function created or updated");
 };
 
 const manualCleanup = async (): Promise<number> => {
@@ -88,18 +77,14 @@ const manualCleanup = async (): Promise<number> => {
   }
 };
 export const startPaymentCleanup = (): void => {
-  console.log("🕐 Starting automatic payment cleanup (every hour)");
-
-  // Run immediately with a small delay to allow server to fully start
   setTimeout(() => {
     cleanupExpiredPayments().catch(console.error);
   }, 5000);
 
-  // Then run every hour
   setInterval(
     () => {
       cleanupExpiredPayments().catch(console.error);
     },
     60 * 60 * 1000
-  ); // 1 hour in milliseconds
+  );
 };
