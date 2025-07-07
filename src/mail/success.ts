@@ -20,7 +20,7 @@ export const sendPaymentSuccessEmail = async (
     `;
     const { data, error } = await transporter.emails.send({
       from: process.env.RESEND_FROM_EMAIL || "noreply@daudtravel.com",
-      to: email && "traveldaud@gmail.com",
+      to: [email, "traveldaud@gmail.com"],
       subject,
       text,
       html,
