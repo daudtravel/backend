@@ -2,8 +2,6 @@ import type { Request, Response } from "express";
 import crypto from "crypto";
 import pool from "../../config/sql";
 import { sendPaymentSuccessEmail } from "../../mail/success";
-import { sendPaymentFailureEmail } from "../../mail/failure";
-import { sendPaymentRefundEmail } from "../../mail/refund";
 
 const BOG_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu4RUyAw3+CdkS3ZNILQh
@@ -66,10 +64,10 @@ export const handleBOGCallback = async (
 
     switch (orderData.order_status?.key) {
       case "completed":
-        await handlePaymentFailure(orderData);
+        await handlePaymentSuccess(orderData);
         break;
       case "rejected":
-        await handlePaymentSuccess(orderData);
+        await handlePaymentFailure(orderData);
         break;
       case "refunded":
         await handlePaymentRefund(orderData);
@@ -156,12 +154,12 @@ async function handlePaymentFailure(orderData: any) {
   const failedOrder = rows[0];
   if (!failedOrder.customer_email) return;
 
-  await sendPaymentFailureEmail({
-    firstName: failedOrder.customer_first_name || "Customer",
-    lastName: failedOrder.customer_last_name || "",
-    email: failedOrder.customer_email,
-    rejectionReason: orderData.reject_reason,
-  });
+  // await sendPaymentFailureEmail({
+  //   firstName: failedOrder.customer_first_name || "Customer",
+  //   lastName: failedOrder.customer_last_name || "",
+  //   email: failedOrder.customer_email,
+  //   rejectionReason: orderData.reject_reason,
+  // });
 }
 
 async function handlePaymentRefund(orderData: any) {
@@ -189,11 +187,11 @@ async function handlePaymentRefund(orderData: any) {
   const refundOrder = rows[0];
   if (!refundOrder.customer_email) return;
 
-  await sendPaymentRefundEmail({
-    firstName: refundOrder.customer_first_name || "Customer",
-    lastName: refundOrder.customer_last_name || "",
-    email: refundOrder.customer_email,
-  });
+  // await sendPaymentRefundEmail({
+  //   firstName: refundOrder.customer_first_name || "Customer",
+  //   lastName: refundOrder.customer_last_name || "",
+  //   email: refundOrder.customer_email,
+  // });
 }
 
 async function handleOtherStatus(orderData: any) {
