@@ -19,7 +19,7 @@ bogTransfersPaymentRouter.post(
   handleTransferBOGPayment
 );
 bogTransfersPaymentRouter.post(
-  "/payments/bog/callback",
+  "/payments/bog/callback/transfer",
   handleTransferBOGCallback
 );
 bogTransfersPaymentRouter.get(

@@ -9,7 +9,7 @@ export const getCallbackUrl = () => {
 };
 
 export const getTransfersCallbackUrl = () => {
-  return `${process.env.BASE_URL}/api/payments/bog/callback/transfers`;
+  return `${process.env.BASE_URL}/api/payments/bog/callback/transfer`;
 };
 
 export const BOG_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
