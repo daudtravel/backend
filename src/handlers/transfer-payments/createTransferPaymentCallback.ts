@@ -114,14 +114,6 @@ async function handleTransferPaymentSuccess(orderData: any) {
     firstName: successOrder.customer_first_name || "Customer",
     lastName: successOrder.customer_last_name || "",
     email: successOrder.customer_email,
-    transferName: successOrder.transfer_name,
-    transferDate: successOrder.transfer_date,
-    transferTime: successOrder.transfer_time,
-    startLocation: successOrder.start_location,
-    endLocation: successOrder.end_location,
-    vehicleType: successOrder.vehicle_type,
-    passengerCount: successOrder.passenger_count,
-    paidAmount: successOrder.paid_amount,
     detailsLink: `https://daudtravel.com/transfer-order/${successOrder.id}`,
   });
 }
