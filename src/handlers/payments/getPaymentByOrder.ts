@@ -16,8 +16,6 @@ export const getPaymentOrderById = async (
       return;
     }
 
-    console.log("🔍 Fetching payment order by ID:", id);
-
     const dataQuery = `
       SELECT 
         id,
@@ -56,7 +54,6 @@ export const getPaymentOrderById = async (
 
     const order = rows[0];
 
-    // Process locations similar to the getPaymentOrder function
     let locations: string[] | undefined;
 
     if (order.locations) {
