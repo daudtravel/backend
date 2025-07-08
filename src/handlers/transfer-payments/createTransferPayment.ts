@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import pool from "../../config/sql";
 import { getBOGAccessToken } from "../payments/getBOGAccessToken";
-import { BOG_API_URL, getCallbackUrl } from "../payments/payments";
+import { BOG_API_URL, getTransfersCallbackUrl } from "../payments/payments";
 
 interface TransferBookingData {
   firstName: string;
@@ -100,7 +100,7 @@ export const handleTransferBOGPayment = async (
     const accessToken = await getBOGAccessToken();
 
     const bogOrderRequest = {
-      callback_url: getCallbackUrl(),
+      callback_url: getTransfersCallbackUrl(),
       external_order_id,
       purchase_units: {
         currency: "GEL",

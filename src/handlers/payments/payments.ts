@@ -1,6 +1,5 @@
 import crypto from "crypto";
 
-
 export const BOG_AUTH_URL =
   "https://oauth2.bog.ge/auth/realms/bog/protocol/openid-connect/token";
 export const BOG_API_URL = "https://api.bog.ge/payments/v1/ecommerce";
@@ -9,6 +8,9 @@ export const getCallbackUrl = () => {
   return `${process.env.BASE_URL}/api/payments/bog/callback`;
 };
 
+export const getTransfersCallbackUrl = () => {
+  return `${process.env.BASE_URL}/api/payments/bog/callback/transfers`;
+};
 
 export const BOG_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu4RUyAw3+CdkS3ZNILQh

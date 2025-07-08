@@ -10,6 +10,7 @@ import { handleTransferBOGPayment } from "../../handlers/transfer-payments/creat
 import { handleTransferBOGCallback } from "../../handlers/transfer-payments/createTransferPaymentCallback";
 import { getBOGTransferStatus } from "../../handlers/transfer-payments/transfersPaymentStatus";
 import { deleteFailedTransferOrders } from "../../handlers/transfer-payments/transfersFailedPaymentCleanup";
+import { getAllTransferOrders } from "../../handlers/transfer-payments/getTransfersPaymentOrders";
 
 const bogTransfersPaymentRouter = Router();
 
@@ -32,5 +33,7 @@ bogTransfersPaymentRouter.delete(
   verifyToken,
   deleteFailedTransferOrders
 );
+
+bogTransfersPaymentRouter.get("/transfer/orders", getAllTransferOrders);
 
 export default bogTransfersPaymentRouter;
