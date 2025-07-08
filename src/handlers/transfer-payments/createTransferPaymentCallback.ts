@@ -114,7 +114,7 @@ async function handleTransferPaymentSuccess(orderData: any) {
     firstName: successOrder.customer_first_name || "Customer",
     lastName: successOrder.customer_last_name || "",
     email: successOrder.customer_email,
-    detailsLink: `https://daudtravel.com/transfer-order/${successOrder.id}`,
+    detailsLink: `https://daudtravel.com/transfer/order/${successOrder.id}`,
   });
 }
 

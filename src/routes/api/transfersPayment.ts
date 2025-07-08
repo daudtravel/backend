@@ -1,16 +1,12 @@
 import { Router } from "express";
-import { getBOGPaymentStatus } from "../../handlers/tour-payments/tourPaymentStatus";
-import { getPaymentOrder } from "../../handlers/tour-payments/getToursPaymentOrders";
-import { handleBOGPayment } from "../../handlers/tour-payments/createTourPayment";
-import { handleBOGCallback } from "../../handlers/tour-payments/createTourPaymentCallback";
-import { getPaymentOrderById } from "../../handlers/tour-payments/getTourPaymentOrderById";
 import verifyToken from "../../middlewares/auth-middleware";
-import { deleteFailedOrders } from "../../handlers/tour-payments/toursFailedPaymentCleanup";
 import { handleTransferBOGPayment } from "../../handlers/transfer-payments/createTransferPayment";
 import { handleTransferBOGCallback } from "../../handlers/transfer-payments/createTransferPaymentCallback";
-import { getBOGTransferStatus } from "../../handlers/transfer-payments/transfersPaymentStatus";
+
 import { deleteFailedTransferOrders } from "../../handlers/transfer-payments/transfersFailedPaymentCleanup";
 import { getAllTransferOrders } from "../../handlers/transfer-payments/getTransfersPaymentOrders";
+import { getBOGReceiptStatus } from "../../handlers/payments/paymentStatus";
+import { getTransferOrderById } from "../../handlers/transfer-payments/getTransferOrderById";
 
 const bogTransfersPaymentRouter = Router();
 
@@ -24,16 +20,27 @@ bogTransfersPaymentRouter.post(
 );
 bogTransfersPaymentRouter.get(
   "/payments/bog/status/:order_id",
-  getBOGTransferStatus
+  getBOGReceiptStatus
 );
-// bogTransfersPaymentRouter.get("/orders", verifyToken);
-// bogTransfersPaymentRouter.get("/orders/:id", getPaymentOrderById);
+
 bogTransfersPaymentRouter.delete(
-  "/orders/failed",
+  "/transfer/orders/failed",
   verifyToken,
   deleteFailedTransferOrders
 );
 
-bogTransfersPaymentRouter.get("/transfer/orders", getAllTransferOrders);
+bogTransfersPaymentRouter.get(
+  "/transfer/orders",
+  verifyToken,
+  getAllTransferOrders
+);
+
+bogTransfersPaymentRouter.get(
+  "/transfer/order/:id",
+
+  getTransferOrderById
+);
+
+// bogTransfersPaymentRouter.get("/orders/:id", getPaymentOrderById);
 
 export default bogTransfersPaymentRouter;

@@ -105,7 +105,7 @@ async function handlePaymentSuccess(orderData: any) {
     firstName: successOrder.customer_first_name || "Customer",
     lastName: successOrder.customer_last_name || "",
     email: successOrder.customer_email,
-    detailsLink: `https://daudtravel.com/order/${successOrder.id}`,
+    detailsLink: `https://daudtravel.com/tours/order/${successOrder.id}`,
   });
 }
 
