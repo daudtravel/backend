@@ -46,6 +46,12 @@ export const handleBOGCallback = async (
       case "completed":
         await handlePaymentSuccess(orderData);
         break;
+      case "rejected":
+        await handlePaymentFailure(orderData);
+        break;
+      // case "refunded":
+      //   await handlePaymentRefund(orderData);
+      //   break;
       default:
         await handleOtherStatus(orderData);
     }
@@ -102,6 +108,71 @@ async function handlePaymentSuccess(orderData: any) {
     detailsLink: `https://daudtravel.com/order/${successOrder.id}`,
   });
 }
+
+async function handlePaymentFailure(orderData: any) {
+  const updateQuery = `
+    UPDATE payment_orders 
+    SET 
+      status = 'failed',
+      rejection_reason = $1,
+      failed_at = CURRENT_TIMESTAMP,
+      callback_data = $2,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE bog_order_id = $3 OR external_order_id = $3
+    RETURNING *;
+  `;
+
+  const values = [
+    orderData.reject_reason,
+    JSON.stringify(orderData),
+    orderData.order_id,
+  ];
+
+  const { rows } = await pool.query(updateQuery, values);
+  if (rows.length === 0) return;
+
+  const failedOrder = rows[0];
+  if (!failedOrder.customer_email) return;
+
+  // await sendPaymentFailureEmail({
+  //   firstName: failedOrder.customer_first_name || "Customer",
+  //   lastName: failedOrder.customer_last_name || "",
+  //   email: failedOrder.customer_email,
+  //   rejectionReason: orderData.reject_reason,
+  // });
+}
+
+// async function handlePaymentRefund(orderData: any) {
+//   const updateQuery = `
+//     UPDATE payment_orders
+//     SET
+//       status = 'refunded',
+//       refunded_amount = $1,
+//       refunded_at = CURRENT_TIMESTAMP,
+//       callback_data = $2,
+//       updated_at = CURRENT_TIMESTAMP
+//     WHERE bog_order_id = $3 OR external_order_id = $3
+//     RETURNING *;
+//   `;
+
+//   const values = [
+//     orderData.purchase_units?.refund_amount,
+//     JSON.stringify(orderData),
+//     orderData.order_id,
+//   ];
+
+//   const { rows } = await pool.query(updateQuery, values);
+//   if (rows.length === 0) return;
+
+//   const refundOrder = rows[0];
+//   if (!refundOrder.customer_email) return;
+
+//   await sendPaymentRefundEmail({
+//     firstName: refundOrder.customer_first_name || "Customer",
+//     lastName: refundOrder.customer_last_name || "",
+//     email: refundOrder.customer_email,
+//   });
+// }
 
 async function handleOtherStatus(orderData: any) {
   const updateQuery = `
