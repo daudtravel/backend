@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS payment_orders (
   )
 );
 
+-- Indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_payment_orders_email ON payment_orders(customer_email);
 CREATE INDEX IF NOT EXISTS idx_payment_orders_status ON payment_orders(status);
 CREATE INDEX IF NOT EXISTS idx_payment_orders_external_order_id ON payment_orders(external_order_id);
@@ -62,42 +63,20 @@ CREATE INDEX IF NOT EXISTS idx_payment_orders_bog_order_id ON payment_orders(bog
 CREATE INDEX IF NOT EXISTS idx_payment_orders_created_at ON payment_orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_payment_orders_selected_date ON payment_orders(selected_date);
 CREATE INDEX IF NOT EXISTS idx_payment_orders_transaction_id ON payment_orders(transaction_id);
-
--- Add index for expires_at to make cleanup faster
 CREATE INDEX IF NOT EXISTS idx_payment_orders_expires_at ON payment_orders(expires_at);
 
+-- Trigger for updating updated_at column
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = CURRENT_TIMESTAMP;
   RETURN NEW;
 END;
-$ language 'plpgsql';
+$$ language 'plpgsql';
 
 DROP TRIGGER IF EXISTS update_payment_orders_updated_at ON payment_orders;
 CREATE TRIGGER update_payment_orders_updated_at
   BEFORE UPDATE ON payment_orders
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
-
--- Add cleanup function for expired payment orders
-CREATE OR REPLACE FUNCTION cleanup_expired_payment_orders()
-RETURNS INTEGER AS $
-DECLARE
-  deleted_count INTEGER;
-BEGIN
-  -- Delete orders that are pending and past their expiration time
-  DELETE FROM payment_orders 
-  WHERE status = 'pending'
-    AND expires_at IS NOT NULL
-    AND expires_at < CURRENT_TIMESTAMP;
-    
-  GET DIAGNOSTICS deleted_count = ROW_COUNT;
-    
-  -- Log the cleanup
-  RAISE NOTICE 'Cleaned up % expired payment orders at %', deleted_count, CURRENT_TIMESTAMP;
-    
-  RETURN deleted_count;
-END;
-$ LANGUAGE plpgsql;
 `;

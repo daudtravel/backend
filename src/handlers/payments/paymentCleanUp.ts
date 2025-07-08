@@ -1,90 +1,79 @@
+import type { Request, Response } from "express";
 import pool from "../../config/sql";
 
-export const cleanupExpiredPayments = async (): Promise<number> => {
-  try {
-    const functionExists = await pool.query(`
-      SELECT EXISTS (
-        SELECT 1 FROM pg_proc 
-        WHERE proname = 'cleanup_expired_payment_orders'
-      ) as exists;
-    `);
+interface CleanupResult {
+  success: boolean;
+  message: string;
+  deletedCount?: number;
+  deletedOrders?: Array<{
+    id: string;
+    external_order_id: string;
+    customer_email: string;
+    created_at: string;
+    rejection_reason?: string;
+  }>;
+  error?: string;
+}
 
-    if (!functionExists.rows[0].exists) {
-      await createCleanupFunction();
+export const deleteFailedOrders = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const selectQuery = `
+      SELECT 
+        id,
+        external_order_id,
+        customer_email,
+        created_at,
+        rejection_reason,
+        status
+      FROM payment_orders 
+      WHERE status = 'failed'
+      ORDER BY created_at DESC;
+    `;
+
+    const selectResult = await pool.query(selectQuery);
+    const failedOrders = selectResult.rows;
+
+    if (failedOrders.length === 0) {
+      res.status(200).json({
+        success: true,
+        message: "No failed orders found to delete",
+        deletedCount: 0,
+        deletedOrders: [],
+      } as CleanupResult);
+      return;
     }
 
-    const result = await pool.query("SELECT cleanup_expired_payment_orders()");
-    const deletedCount = result.rows[0].cleanup_expired_payment_orders;
-
-    return deletedCount;
-  } catch (error) {
-    console.error("❌ Error cleaning up expired payment orders:", error);
-
-    throw error;
-  }
-};
-
-const createCleanupFunction = async (): Promise<void> => {
-  const functionSQL = `
-    CREATE OR REPLACE FUNCTION cleanup_expired_payment_orders()
-    RETURNS INTEGER AS $$
-    DECLARE
-      deleted_count INTEGER;
-    BEGIN
+    const deleteQuery = `
       DELETE FROM payment_orders 
-      WHERE (status = 'pending' OR status = 'failed')
-        AND expires_at IS NOT NULL
-        AND expires_at < CURRENT_TIMESTAMP;
-        
-      GET DIAGNOSTICS deleted_count = ROW_COUNT;
-        
-      RAISE NOTICE 'Cleaned up % expired payment orders at %', deleted_count, CURRENT_TIMESTAMP;
-        
-      RETURN deleted_count;
-    END;
-    $$ LANGUAGE plpgsql;
-  `;
+      WHERE status = 'failed'
+      RETURNING id, external_order_id;
+    `;
 
-  await pool.query(functionSQL);
-};
+    const deleteResult = await pool.query(deleteQuery);
+    const deletedCount = deleteResult.rowCount || 0;
 
-const manualCleanup = async (): Promise<number> => {
-  try {
-    const result = await pool.query(`
-      DELETE FROM payment_orders 
-      WHERE (status = 'pending' OR status = 'failed')
-        AND expires_at IS NOT NULL
-        AND expires_at < CURRENT_TIMESTAMP
-      RETURNING id;
-    `);
-
-    const deletedCount = result.rowCount || 0;
-
-    if (deletedCount > 0) {
-      console.log(
-        `🧹 Manually cleaned up ${deletedCount} expired payment orders`
-      );
-    } else {
-      console.log(
-        "🧹 No expired failed or pending payment orders to clean up manually"
-      );
-    }
-
-    return deletedCount;
+    res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${deletedCount} failed payment orders`,
+      deletedCount,
+      deletedOrders: failedOrders.map((order) => ({
+        id: order.id,
+        external_order_id: order.external_order_id,
+        customer_email: order.customer_email,
+        created_at: order.created_at,
+        rejection_reason: order.rejection_reason,
+      })),
+    } as CleanupResult);
   } catch (error) {
-    console.error("❌ Manual cleanup failed:", error);
-    return 0;
-  }
-};
-export const startPaymentCleanup = (): void => {
-  setTimeout(() => {
-    cleanupExpiredPayments().catch(console.error);
-  }, 5000);
+    console.error("❌ Error deleting failed orders:", error);
 
-  setInterval(
-    () => {
-      cleanupExpiredPayments().catch(console.error);
-    },
-    60 * 60 * 1000
-  );
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete failed orders",
+      error: error instanceof Error ? error.message : "Unknown error",
+    } as CleanupResult);
+  }
 };

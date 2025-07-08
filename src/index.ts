@@ -5,7 +5,6 @@ import cors from "cors";
 import { initDatabase } from "./database/db.init";
 import path from "path";
 import pool from "./config/sql";
-import { startPaymentCleanup } from "./handlers/payments/paymentCleanUp";
 
 dotenv.config();
 
@@ -69,8 +68,6 @@ process.on("SIGINT", gracefulShutdown);
 const startServer = async (): Promise<void> => {
   try {
     await initDatabase();
-
-    startPaymentCleanup();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
