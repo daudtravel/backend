@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { getBOGAccessToken } from "./getBOGAccessToken";
-import { BOG_API_URL, getCallbackUrl } from "./payments";
+import { getBOGAccessToken } from "../payments/getBOGAccessToken";
+import { BOG_API_URL, getCallbackUrl } from "../payments/payments";
 import pool from "../../config/sql";
 
 interface BookingData {

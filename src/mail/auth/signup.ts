@@ -1,5 +1,5 @@
-import { transporter } from "./config";
-import pool from "../config/sql";
+import { transporter } from "../config";
+import pool from "../../config/sql";
 
 export const sendVerificationEmail = async (email: string, code: string) => {
   try {

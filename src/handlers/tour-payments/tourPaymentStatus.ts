@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
-import { getBOGAccessToken } from "./getBOGAccessToken";
-import { BOG_API_URL } from "./payments";
+import { getBOGAccessToken } from "../payments/getBOGAccessToken";
+import { BOG_API_URL } from "../payments/payments";
 
 interface BOGPaymentDetails {
   order_id: string;

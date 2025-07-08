@@ -1,4 +1,4 @@
-import { transporter, EmailData } from "./config";
+import { transporter, EmailData } from "../config";
 
 export const sendPaymentSuccessEmail = async (
   emailData: EmailData & { detailsLink: string }

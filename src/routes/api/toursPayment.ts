@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { getBOGPaymentStatus } from "../../handlers/payments/handleBogPaymentStatus";
-import { getPaymentOrder } from "../../handlers/payments/getPaymentOrders";
-import { handleBOGPayment } from "../../handlers/payments/handleBOGPayment";
-import { handleBOGCallback } from "../../handlers/payments/handleBogCallback";
-import { getPaymentOrderById } from "../../handlers/payments/getPaymentByOrder";
+import { getBOGPaymentStatus } from "../../handlers/tour-payments/tourPaymentStatus";
+import { getPaymentOrder } from "../../handlers/tour-payments/getToursPaymentOrders";
+import { handleBOGPayment } from "../../handlers/tour-payments/createTourPayment";
+import { handleBOGCallback } from "../../handlers/tour-payments/createTourPaymentCallback";
+import { getPaymentOrderById } from "../../handlers/tour-payments/getTourPaymentOrderById";
 import verifyToken from "../../middlewares/auth-middleware";
-import { deleteFailedOrders } from "../../handlers/payments/paymentCleanUp";
+import { deleteFailedOrders } from "../../handlers/tour-payments/toursFailedPaymentCleanup";
 
 const bogPaymentsRouter = Router();
 

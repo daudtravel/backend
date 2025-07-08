@@ -7,6 +7,7 @@ import { createDriversTable } from "./migrations/005_create_drivers_table";
 import { createFaqTable } from "./migrations/006_create_faq_table";
 import { createVideosTable } from "./migrations/007_create_videos_table";
 import { createPaymentOrdersTable } from "./migrations/008_create_payments_order_table";
+import { createTransferPaymentOrdersTable } from "./migrations/009_create_transfer_table_payment";
 
 interface Migration {
   id: string;
@@ -64,6 +65,12 @@ const migrations: Migration[] = [
     description: "Create payment orders table with indexes",
     expectedTables: ["payment_orders"],
   },
+  {
+    id: "009_create_transfer_table_payment",
+    query: createTransferPaymentOrdersTable,
+    description: "Create payment transfers table with indexes",
+    expectedTables: ["transfer_payment_orders"],
+  },
 ];
 
 const createMigrationsTable = async (): Promise<void> => {
@@ -97,38 +104,19 @@ const isMigrationExecuted = async (migrationId: string): Promise<boolean> => {
 
 const verifyTablesExist = async (tableNames: string[]): Promise<boolean> => {
   try {
-    console.log(`🔍 Verifying tables: ${tableNames.join(", ")}`);
-
-    // Add a small delay to ensure table creation is complete
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     for (const tableName of tableNames) {
       const result = await pool.query(
-        `
-        SELECT EXISTS (
+        `SELECT EXISTS (
           SELECT FROM information_schema.tables 
           WHERE table_schema = 'public' 
           AND table_name = $1
-        );
-      `,
+        );`,
         [tableName]
       );
 
-      console.log(`  Table ${tableName} exists: ${result.rows[0].exists}`);
-
       if (!result.rows[0].exists) {
-        // Debug: List all existing tables
-        const allTables = await pool.query(`
-          SELECT table_name 
-          FROM information_schema.tables 
-          WHERE table_schema = 'public' 
-          ORDER BY table_name
-        `);
-        console.log(
-          "📋 Existing tables:",
-          allTables.rows.map((row) => row.table_name)
-        );
-
         return false;
       }
     }
@@ -142,46 +130,29 @@ const verifyTablesExist = async (tableNames: string[]): Promise<boolean> => {
 const runMigration = async (migration: Migration): Promise<void> => {
   const client = await pool.connect();
   console.log(`🚀 Running migration: ${migration.id}`);
-  console.log(`📝 Description: ${migration.description}`);
 
   try {
     await client.query("BEGIN");
-
-    // Log the SQL being executed for debugging
-    console.log(`⚙️  Executing SQL for ${migration.id}...`);
-    console.log(`📄 SQL Preview: ${migration.query.substring(0, 200)}...`);
-
-    // Execute the migration query
-    const result = await client.query(migration.query);
-    console.log(
-      `✅ SQL executed successfully. Rows affected: ${result.rowCount || 0}`
-    );
-
-    // Commit the transaction first
+    await client.query(migration.query);
     await client.query("COMMIT");
-    console.log(`✅ Transaction committed for ${migration.id}`);
 
-    // Release the client before verification
     client.release();
 
-    // Now verify expected tables were created using a fresh connection
-    if (migration.expectedTables && migration.expectedTables.length > 0) {
+    if (migration.expectedTables?.length) {
       const tablesExist = await verifyTablesExist(migration.expectedTables);
       if (!tablesExist) {
         throw new Error(
           `Migration ${migration.id} completed but expected tables were not created`
         );
       }
-      console.log(`✅ All expected tables verified for ${migration.id}`);
     }
 
-    // Record the migration using pool (not the released client)
     await pool.query(
       "INSERT INTO migrations (id, description) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
       [migration.id, migration.description]
     );
 
-    console.log(`✅ Migration ${migration.id} completed successfully\n`);
+    console.log(`✅ Migration ${migration.id} completed`);
   } catch (error) {
     await client.query("ROLLBACK");
     console.error(`❌ Migration ${migration.id} failed:`, error);
@@ -193,8 +164,7 @@ export const runMigrations = async (): Promise<void> => {
   console.log("🗃️  Starting database migrations...\n");
 
   try {
-    // Test database connection first
-    const testResult = await pool.query("SELECT NOW()");
+    await pool.query("SELECT NOW()");
     console.log("✅ Database connection verified");
 
     await createMigrationsTable();
@@ -209,32 +179,22 @@ export const runMigrations = async (): Promise<void> => {
         await runMigration(migration);
         executedCount++;
       } else {
-        console.log(
-          `⏭️  Skipping migration ${migration.id} (already executed)`
-        );
-
-        // Still verify tables exist even for skipped migrations
-        if (migration.expectedTables && migration.expectedTables.length > 0) {
+        if (migration.expectedTables?.length) {
           const tablesExist = await verifyTablesExist(migration.expectedTables);
           if (!tablesExist) {
-            console.log(
-              `⚠️  Warning: Migration ${migration.id} was marked as executed but expected tables are missing!`
-            );
-            console.log(`🔄 Re-running migration ${migration.id}...`);
-
-            // Delete the migration record and re-run
             await pool.query("DELETE FROM migrations WHERE id = $1", [
               migration.id,
             ]);
             await runMigration(migration);
             executedCount++;
+            continue;
           }
         }
         skippedCount++;
       }
     }
 
-    console.log("🎉 Migration process completed successfully!");
+    console.log("🎉 Migration process completed");
     console.log(
       `📊 Summary: ${executedCount} executed, ${skippedCount} skipped`
     );
