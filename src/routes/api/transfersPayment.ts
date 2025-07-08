@@ -14,7 +14,7 @@ import { deleteFailedTransferOrders } from "../../handlers/transfer-payments/tra
 const bogTransfersPaymentRouter = Router();
 
 bogTransfersPaymentRouter.post(
-  "/payments/bog/create",
+  "/payments/bog/transfer/create",
   handleTransferBOGPayment
 );
 bogTransfersPaymentRouter.post(
