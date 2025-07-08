@@ -40,7 +40,6 @@ bogTransfersPaymentRouter.get(
 
   getTransferOrderById
 );
-
-// bogTransfersPaymentRouter.get("/orders/:id", getPaymentOrderById);
+ 
 
 export default bogTransfersPaymentRouter;

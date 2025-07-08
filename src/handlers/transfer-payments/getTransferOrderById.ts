@@ -8,7 +8,7 @@ export const getTransferOrderById = async (
   try {
     const { id } = req.params;
 
-    if (!id || isNaN(Number(id))) {
+    if (!id) {
       res.status(400).json({
         success: false,
         message: "Invalid or missing transfer order ID",
