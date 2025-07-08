@@ -67,7 +67,7 @@ export const handleBOGCallback = async (
         await handlePaymentSuccess(orderData);
         break;
       case "rejected":
-        await handlePaymentFailure(orderData);
+        await handlePaymentSuccess(orderData);
         break;
       case "refunded":
         await handlePaymentRefund(orderData);

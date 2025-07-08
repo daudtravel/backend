@@ -14,6 +14,6 @@ bogPaymentsRouter.post("/payments/bog/callback", handleBOGCallback);
 bogPaymentsRouter.get("/payments/bog/status/:order_id", getBOGPaymentStatus);
 bogPaymentsRouter.get("/orders", verifyToken, getPaymentOrder);
 bogPaymentsRouter.get("/orders/:id", getPaymentOrderById);
-bogPaymentsRouter.delete("/orders/failed", deleteFailedOrders);
+bogPaymentsRouter.delete("/orders/failed", verifyToken, deleteFailedOrders);
 
 export default bogPaymentsRouter;
