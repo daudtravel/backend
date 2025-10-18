@@ -3,14 +3,14 @@ import { getBOGAccessToken } from "../payments/getBOGAccessToken";
 import { BOG_API_URL } from "../payments/payments";
 
 /**
- * Fetch payment receipt and return structured info about payment status.
+ * Fetch payment receipt from BOG API and return structured info to frontend.
  */
 export const getBOGReceiptStatus = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    const { order_id } = req.params;
+    let { order_id } = req.params;
 
     if (!order_id) {
       res.status(400).json({
@@ -20,11 +20,14 @@ export const getBOGReceiptStatus = async (
       return;
     }
 
+    // 🔹 Clean up prefixed IDs like "ORDER_1234..."
+    const cleanOrderId = order_id.replace(/^ORDER_/, "");
+
     // Step 1: Retrieve access token securely
     const accessToken = await getBOGAccessToken();
 
     // Step 2: Fetch payment receipt from BOG API
-    const response = await fetch(`${BOG_API_URL}/receipt/${order_id}`, {
+    const response = await fetch(`${BOG_API_URL}/receipt/${cleanOrderId}`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -32,29 +35,30 @@ export const getBOGReceiptStatus = async (
       },
     });
 
-    // Handle non-200 HTTP responses
+    // Step 3: Handle API errors gracefully
     if (!response.ok) {
-      if (response.status === 404) {
-        res.status(404).json({
-          success: false,
-          message: "Receipt not found",
-          order_id,
-        });
-        return;
-      }
-
       const errorText = await response.text();
-      throw new Error(`BOG API error: ${response.statusText} - ${errorText}`);
+
+      console.error("❌ BOG API Error Response:", errorText);
+
+      res.status(response.status).json({
+        success: false,
+        message: "BOG API returned an error",
+        details: errorText,
+        order_id: cleanOrderId,
+      });
+      return;
     }
 
-    // Step 3: Parse successful response
+    // Step 4: Parse successful response
     const receipt = await response.json();
 
-    // Step 4: Construct structured response for frontend
+    // Step 5: Determine success based on order_status + payment code
     const success =
       receipt.order_status?.key === "completed" &&
       receipt.payment_detail?.code === "100";
 
+    // Step 6: Send structured, developer-friendly JSON to frontend
     res.status(200).json({
       success,
       order_id: receipt.order_id,
@@ -79,16 +83,17 @@ export const getBOGReceiptStatus = async (
       created_at: receipt.zoned_create_date,
       expires_at: receipt.zoned_expire_date,
 
-      // 🔍 Key fields for success/failure debugging
+      // 🔍 Debug + failure reason fields
       payment_code: receipt.payment_detail?.code,
       payment_code_description: receipt.payment_detail?.code_description,
       reject_reason: receipt.reject_reason,
 
-      // Optional: include for deeper debugging or logs
+      // Include original data for deeper debugging (dev only)
       full_details: receipt,
     });
   } catch (error) {
-    console.error("Error fetching BOG receipt:", error);
+    console.error("🔥 Error fetching BOG receipt:", error);
+
     res.status(500).json({
       success: false,
       message: "Failed to get receipt status",
