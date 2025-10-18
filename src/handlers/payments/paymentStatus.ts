@@ -3,6 +3,104 @@ import { getBOGAccessToken } from "../payments/getBOGAccessToken";
 import { BOG_API_URL } from "../payments/payments";
 
 /**
+ * BOG Payment status mapping
+ */
+const PAYMENT_STATUS = {
+  SUCCESS: "100", // Payment successful
+  INSUFFICIENT_FUNDS: "116", // Insufficient funds
+  CANCELLED: "120", // Transaction cancelled
+  EXPIRED: "130", // Payment expired
+  REJECTED: "300", // Transaction rejected
+} as const;
+
+const ORDER_STATUS = {
+  COMPLETED: "completed",
+  CREATED: "created",
+  EXPIRED: "expired",
+  REJECTED: "rejected",
+  CANCELLED: "cancelled",
+} as const;
+
+/**
+ * Determine detailed payment status
+ */
+function getPaymentStatus(receipt: any) {
+  const orderStatus = receipt.order_status?.key;
+  const paymentCode = receipt.payment_detail?.code;
+
+  // Check if payment was successful
+  if (
+    orderStatus === ORDER_STATUS.COMPLETED &&
+    paymentCode === PAYMENT_STATUS.SUCCESS
+  ) {
+    return {
+      success: true,
+      status: "completed",
+      reason: "Payment completed successfully",
+    };
+  }
+
+  // Handle specific failure cases
+  if (paymentCode === PAYMENT_STATUS.INSUFFICIENT_FUNDS) {
+    return {
+      success: false,
+      status: "insufficient_funds",
+      reason: "Insufficient funds in account",
+    };
+  }
+
+  if (
+    paymentCode === PAYMENT_STATUS.CANCELLED ||
+    orderStatus === ORDER_STATUS.CANCELLED
+  ) {
+    return {
+      success: false,
+      status: "cancelled",
+      reason: "Payment was cancelled by user or system",
+    };
+  }
+
+  if (
+    paymentCode === PAYMENT_STATUS.EXPIRED ||
+    orderStatus === ORDER_STATUS.EXPIRED
+  ) {
+    return {
+      success: false,
+      status: "expired",
+      reason: "Payment link has expired",
+    };
+  }
+
+  if (
+    paymentCode === PAYMENT_STATUS.REJECTED ||
+    orderStatus === ORDER_STATUS.REJECTED
+  ) {
+    return {
+      success: false,
+      status: "rejected",
+      reason: receipt.reject_reason || "Payment was rejected",
+    };
+  }
+
+  // Payment still pending/created
+  if (orderStatus === ORDER_STATUS.CREATED) {
+    return {
+      success: false,
+      status: "pending",
+      reason: "Payment is still pending",
+    };
+  }
+
+  // Unknown/other status
+  return {
+    success: false,
+    status: "unknown",
+    reason:
+      receipt.payment_detail?.code_description || "Unknown payment status",
+  };
+}
+
+/**
  * Fetch payment receipt from BOG API and return structured info to frontend.
  */
 export const getBOGReceiptStatus = async (
@@ -20,7 +118,7 @@ export const getBOGReceiptStatus = async (
       return;
     }
 
-    // 🔹 Clean up prefixed IDs like "ORDER_1234..."
+    // Clean up prefixed IDs like "ORDER_1234..."
     const cleanOrderId = order_id.replace(/^ORDER_/, "");
 
     // Step 1: Retrieve access token securely
@@ -38,11 +136,11 @@ export const getBOGReceiptStatus = async (
     // Step 3: Handle API errors gracefully
     if (!response.ok) {
       const errorText = await response.text();
-
       console.error("❌ BOG API Error Response:", errorText);
 
       res.status(response.status).json({
         success: false,
+        status: "api_error",
         message: "BOG API returned an error",
         details: errorText,
         order_id: cleanOrderId,
@@ -53,27 +151,28 @@ export const getBOGReceiptStatus = async (
     // Step 4: Parse successful response
     const receipt = await response.json();
 
-    // Step 5: Determine success based on order_status + payment code
-    const success =
-      receipt.order_status?.key === "completed" &&
-      receipt.payment_detail?.code === "100";
+    // Step 5: Determine detailed payment status
+    const paymentStatus = getPaymentStatus(receipt);
 
     // Step 6: Send structured, developer-friendly JSON to frontend
     res.status(200).json({
-      success,
+      success: paymentStatus.success,
+      status: paymentStatus.status,
+      reason: paymentStatus.reason,
+
       order_id: receipt.order_id,
       external_order_id: receipt.external_order_id,
 
       // Payment status & description
-      status: receipt.order_status?.key,
-      status_description: receipt.order_status?.value,
+      order_status: receipt.order_status?.key,
+      order_status_description: receipt.order_status?.value,
 
       // Amount details
       amount: {
-        requested: parseFloat(receipt.purchase_units.request_amount),
-        transferred: parseFloat(receipt.purchase_units.transfer_amount),
-        refunded: parseFloat(receipt.purchase_units.refund_amount),
-        currency: receipt.purchase_units.currency_code,
+        requested: parseFloat(receipt.purchase_units?.request_amount || 0),
+        transferred: parseFloat(receipt.purchase_units?.transfer_amount || 0),
+        refunded: parseFloat(receipt.purchase_units?.refund_amount || 0),
+        currency: receipt.purchase_units?.currency_code,
       },
 
       // Buyer & transaction details
@@ -83,7 +182,7 @@ export const getBOGReceiptStatus = async (
       created_at: receipt.zoned_create_date,
       expires_at: receipt.zoned_expire_date,
 
-      // 🔍 Debug + failure reason fields
+      // Debug fields
       payment_code: receipt.payment_detail?.code,
       payment_code_description: receipt.payment_detail?.code_description,
       reject_reason: receipt.reject_reason,
@@ -96,6 +195,7 @@ export const getBOGReceiptStatus = async (
 
     res.status(500).json({
       success: false,
+      status: "server_error",
       message: "Failed to get receipt status",
       error: error instanceof Error ? error.message : "Unknown error",
     });
