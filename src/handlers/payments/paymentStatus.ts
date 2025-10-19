@@ -21,18 +21,26 @@ export const getBOGReceiptStatus = async (
     console.log(`\n🔍 Looking up order: ${order_id}`);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔍 STEP 1: Check if this is external_order_id (ORDER_xxx)
-    // If so, look up the bog_order_id from database
+    // 🔍 STEP 1: Check database first (callback may have already updated it)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let bogOrderId = order_id;
+    let dbOrder = null;
 
     if (order_id.startsWith("ORDER_")) {
-      console.log(
-        "📌 This is an external_order_id, looking up bog_order_id..."
-      );
+      console.log("📌 This is an external_order_id, looking up in database...");
 
       const lookupQuery = `
-        SELECT bog_order_id, status 
+        SELECT 
+          bog_order_id, 
+          status, 
+          rejection_reason,
+          payment_response_code,
+          callback_data,
+          amount_paid,
+          payment_method,
+          transaction_id,
+          customer_email,
+          tour_name
         FROM payment_orders 
         WHERE external_order_id = $1
         LIMIT 1;
@@ -50,13 +58,144 @@ export const getBOGReceiptStatus = async (
         return;
       }
 
-      bogOrderId = rows[0].bog_order_id;
+      dbOrder = rows[0];
+      bogOrderId = dbOrder.bog_order_id;
       console.log(`✅ Found bog_order_id: ${bogOrderId}`);
-      console.log(`   Current status in DB: ${rows[0].status}`);
+      console.log(`   Current status in DB: ${dbOrder.status}`);
+
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // 🎯 IF DATABASE ALREADY HAS COMPLETED/FAILED STATUS, RETURN IT!
+      // This means the callback already processed it
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      if (dbOrder.status === "completed" || dbOrder.status === "failed") {
+        console.log(`✅ Using cached status from database: ${dbOrder.status}`);
+
+        // Parse callback_data if available for detailed info
+        let callbackData = null;
+        try {
+          callbackData = dbOrder.callback_data
+            ? JSON.parse(dbOrder.callback_data)
+            : null;
+        } catch (e) {
+          console.warn("⚠️ Failed to parse callback_data");
+        }
+
+        // Build response from database
+        const isSuccessful = dbOrder.status === "completed";
+
+        res.status(200).json({
+          success: isSuccessful,
+          order_id: bogOrderId,
+          external_order_id: order_id,
+          status: dbOrder.status,
+          status_description: isSuccessful
+            ? "Payment completed successfully"
+            : dbOrder.rejection_reason || "Payment failed",
+
+          // ✅ CRITICAL: Include payment response details from database
+          payment_response: {
+            code:
+              dbOrder.payment_response_code || (isSuccessful ? "100" : null),
+            description:
+              dbOrder.rejection_reason ||
+              (isSuccessful ? "Transaction approved" : "Payment failed"),
+            is_successful: isSuccessful,
+          },
+
+          amount: {
+            requested: parseFloat(dbOrder.amount_paid || "0"),
+            transferred: isSuccessful
+              ? parseFloat(dbOrder.amount_paid || "0")
+              : 0,
+            refunded: 0,
+            currency: "GEL",
+          },
+
+          payment_method: dbOrder.payment_method || "card",
+          transaction_id: dbOrder.transaction_id,
+
+          // Include full callback data if available
+          ...(callbackData && { full_details: callbackData }),
+        });
+        return;
+      }
+    } else {
+      // If bog_order_id was provided directly, still check database
+      const lookupQuery = `
+        SELECT 
+          bog_order_id, 
+          status, 
+          rejection_reason,
+          payment_response_code,
+          callback_data,
+          amount_paid,
+          payment_method,
+          transaction_id
+        FROM payment_orders 
+        WHERE bog_order_id = $1
+        LIMIT 1;
+      `;
+
+      const { rows } = await pool.query(lookupQuery, [order_id]);
+
+      if (rows.length > 0) {
+        dbOrder = rows[0];
+
+        // Return cached status if available
+        if (dbOrder.status === "completed" || dbOrder.status === "failed") {
+          console.log(
+            `✅ Using cached status from database: ${dbOrder.status}`
+          );
+
+          let callbackData = null;
+          try {
+            callbackData = dbOrder.callback_data
+              ? JSON.parse(dbOrder.callback_data)
+              : null;
+          } catch (e) {
+            console.warn("⚠️ Failed to parse callback_data");
+          }
+
+          const isSuccessful = dbOrder.status === "completed";
+
+          res.status(200).json({
+            success: isSuccessful,
+            order_id: bogOrderId,
+            status: dbOrder.status,
+            status_description: isSuccessful
+              ? "Payment completed successfully"
+              : dbOrder.rejection_reason || "Payment failed",
+
+            payment_response: {
+              code:
+                dbOrder.payment_response_code || (isSuccessful ? "100" : null),
+              description:
+                dbOrder.rejection_reason ||
+                (isSuccessful ? "Transaction approved" : "Payment failed"),
+              is_successful: isSuccessful,
+            },
+
+            amount: {
+              requested: parseFloat(dbOrder.amount_paid || "0"),
+              transferred: isSuccessful
+                ? parseFloat(dbOrder.amount_paid || "0")
+                : 0,
+              refunded: 0,
+              currency: "GEL",
+            },
+
+            payment_method: dbOrder.payment_method || "card",
+            transaction_id: dbOrder.transaction_id,
+
+            ...(callbackData && { full_details: callbackData }),
+          });
+          return;
+        }
+      }
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔍 STEP 2: Fetch receipt from BOG API using bog_order_id
+    // 🔍 STEP 2: If status is still "pending", fetch from BOG API
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const accessToken = await getBOGAccessToken();
 
@@ -72,6 +211,35 @@ export const getBOGReceiptStatus = async (
     if (!response.ok) {
       if (response.status === 404) {
         console.error(`❌ BOG API: Receipt not found for ${bogOrderId}`);
+
+        // ✅ If we have database info about this order, return that
+        if (dbOrder) {
+          console.log(`✅ Returning database info instead of 404`);
+
+          res.status(200).json({
+            success: false,
+            order_id: bogOrderId,
+            external_order_id: order_id.startsWith("ORDER_")
+              ? order_id
+              : undefined,
+            status: dbOrder.status,
+            status_description: "Payment cancelled or expired",
+
+            payment_response: {
+              code: null,
+              description:
+                dbOrder.rejection_reason ||
+                "Payment was not completed. The session may have expired or been cancelled.",
+              is_successful: false,
+            },
+
+            message:
+              "Payment session expired or was cancelled before completion",
+          });
+          return;
+        }
+
+        // No database record either
         res.status(404).json({
           success: false,
           message: "Receipt not found in BOG system",
