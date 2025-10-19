@@ -62,8 +62,6 @@ export const sendVerificationEmail = async (email: string, code: string) => {
       console.error(`❌ Failed to send verification email to ${email}`, error);
       throw new Error("Failed to send verification email. Please try again.");
     }
-
-    console.log(`✅ Verification email sent to ${email}`, data?.id);
   } catch (error) {
     console.error(`❌ Failed to send verification email to ${email}`, error);
     throw new Error("Failed to send verification email. Please try again.");

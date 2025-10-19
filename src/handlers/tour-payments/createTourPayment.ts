@@ -130,28 +130,10 @@ export const handleBOGPayment = async (
       return;
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 📝 PREPARE ORDER DATA
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const external_order_id = `ORDER_${uuidv4()}`;
     const accessToken = await getBOGAccessToken();
     const cleanDescription = extractPlainText(bookingData.tourDescription);
 
-    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("📤 CREATING BOG TOUR PAYMENT ORDER");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log(`📌 External Order ID: ${external_order_id}`);
-    console.log(`🎫 Tour: ${tourName}`);
-    console.log(`👥 People: ${peopleAmount}`);
-    console.log(
-      `💰 Payment: ${paymentAmount} GEL (${paymentType ? "Full" : "Reservation"})`
-    );
-    console.log(`📧 Customer: ${email}`);
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔧 CREATE BOG ORDER
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const bogOrderRequest = {
       callback_url: getCallbackUrl(),
       external_order_id,
@@ -168,8 +150,7 @@ export const handleBOGPayment = async (
           },
         ],
       },
-      // ✅ SOLUTION: Use external_order_id in redirect URLs
-      // Frontend will look up BOG's order_id from database using this
+
       redirect_urls: {
         success: `${process.env.FRONTEND_URL}/payment/success?order_id=${external_order_id}`,
         fail: `${process.env.FRONTEND_URL}/payment/failure?order_id=${external_order_id}`,
@@ -205,14 +186,6 @@ export const handleBOGPayment = async (
     const bogOrderId = bogOrderData.id;
     const paymentUrl = bogOrderData._links.redirect.href;
 
-    console.log("✅ BOG Order Created Successfully!");
-    console.log(`🆔 BOG Order ID: ${bogOrderId}`);
-    console.log(`📌 External Order ID: ${external_order_id}`);
-    console.log(`🔗 Payment URL: ${paymentUrl}\n`);
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 💾 SAVE TO DATABASE
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const calculatedRemainingAmount = paymentType
       ? null
       : totalTourPrice - paymentAmount;
@@ -275,12 +248,6 @@ export const handleBOGPayment = async (
       new Date(Date.now() + 30 * 60 * 1000),
     ];
 
-    const { rows } = await pool.query(insertQuery, values);
-    console.log(`💾 Payment order saved to database (ID: ${rows[0].id})\n`);
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✅ RETURN RESPONSE
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     res.status(201).json({
       success: true,
       orderId: bogOrderId,

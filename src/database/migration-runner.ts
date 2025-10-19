@@ -129,7 +129,6 @@ const verifyTablesExist = async (tableNames: string[]): Promise<boolean> => {
 
 const runMigration = async (migration: Migration): Promise<void> => {
   const client = await pool.connect();
-  console.log(`🚀 Running migration: ${migration.id}`);
 
   try {
     await client.query("BEGIN");
@@ -151,8 +150,6 @@ const runMigration = async (migration: Migration): Promise<void> => {
       "INSERT INTO migrations (id, description) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
       [migration.id, migration.description]
     );
-
-    console.log(`✅ Migration ${migration.id} completed`);
   } catch (error) {
     await client.query("ROLLBACK");
     console.error(`❌ Migration ${migration.id} failed:`, error);
@@ -161,11 +158,8 @@ const runMigration = async (migration: Migration): Promise<void> => {
 };
 
 export const runMigrations = async (): Promise<void> => {
-  console.log("🗃️  Starting database migrations...\n");
-
   try {
     await pool.query("SELECT NOW()");
-    console.log("✅ Database connection verified");
 
     await createMigrationsTable();
 
@@ -193,11 +187,6 @@ export const runMigrations = async (): Promise<void> => {
         skippedCount++;
       }
     }
-
-    console.log("🎉 Migration process completed");
-    console.log(
-      `📊 Summary: ${executedCount} executed, ${skippedCount} skipped`
-    );
   } catch (error) {
     console.error("💥 Migration process failed:", error);
     throw error;
@@ -216,10 +205,8 @@ export const rollbackLastMigration = async (): Promise<void> => {
     }
 
     const lastMigrationId = result.rows[0].id;
-    console.log(`🔄 Rolling back migration: ${lastMigrationId}`);
 
     await pool.query("DELETE FROM migrations WHERE id = $1", [lastMigrationId]);
-    console.log(`✅ Migration ${lastMigrationId} rolled back`);
   } catch (error) {
     console.error("❌ Rollback failed:", error);
     throw error;
@@ -227,10 +214,8 @@ export const rollbackLastMigration = async (): Promise<void> => {
 };
 
 export const resetMigrations = async (): Promise<void> => {
-  console.log("⚠️  WARNING: This will delete all migration records!");
   try {
     await pool.query("DELETE FROM migrations");
-    console.log("✅ All migration records cleared");
   } catch (error) {
     console.error("❌ Failed to reset migrations:", error);
     throw error;

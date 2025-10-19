@@ -18,15 +18,9 @@ export const getBOGReceiptStatus = async (
       return;
     }
 
-    console.log(`\n🔍 Looking up order: ${order_id}`);
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔍 STEP 1: Check database first
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let bogOrderId = order_id;
     let dbOrder = null;
 
-    // Determine if this is an external_order_id or bog_order_id
     const isExternalOrderId = order_id.startsWith("ORDER_");
 
     const lookupQuery = `
@@ -54,23 +48,14 @@ export const getBOGReceiptStatus = async (
     if (rows.length > 0) {
       dbOrder = rows[0];
       bogOrderId = dbOrder.bog_order_id;
-      console.log(`✅ Found order in database`);
-      console.log(`   BOG Order ID: ${bogOrderId}`);
-      console.log(`   Current status: ${dbOrder.status}`);
 
       if (dbOrder.rejection_reason) {
         console.log(`   Rejection reason: ${dbOrder.rejection_reason}`);
       }
 
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // 🎯 IF DATABASE HAS COMPLETED/FAILED STATUS, RETURN IT!
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       if (dbOrder.status === "completed" || dbOrder.status === "failed") {
-        console.log(`✅ Using cached status from database: ${dbOrder.status}`);
-
         const isSuccessful = dbOrder.status === "completed";
 
-        // Build comprehensive response from database
         const response = {
           success: isSuccessful,
           order_id: bogOrderId,
@@ -80,7 +65,6 @@ export const getBOGReceiptStatus = async (
             ? "Payment completed successfully"
             : dbOrder.rejection_reason || "Payment failed",
 
-          // ✅ CRITICAL: Include payment response details
           payment_response: {
             code:
               dbOrder.payment_response_code || (isSuccessful ? "100" : null),
@@ -102,12 +86,10 @@ export const getBOGReceiptStatus = async (
           payment_method: dbOrder.payment_method || "card",
           transaction_id: dbOrder.transaction_id,
 
-          // Include timing information
           ...(dbOrder.failed_at && { failed_at: dbOrder.failed_at }),
           ...(dbOrder.paid_at && { paid_at: dbOrder.paid_at }),
         };
 
-        // Add full callback data if available
         if (dbOrder.callback_data) {
           try {
             const callbackData = JSON.parse(dbOrder.callback_data);
@@ -121,8 +103,6 @@ export const getBOGReceiptStatus = async (
         return;
       }
     } else if (isExternalOrderId) {
-      // If no database record found for external_order_id
-      console.warn(`⚠️ No order found with external_order_id: ${order_id}`);
       res.status(404).json({
         success: false,
         message: "Order not found in database",
@@ -130,11 +110,6 @@ export const getBOGReceiptStatus = async (
       });
       return;
     }
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔍 STEP 2: If status is "pending", fetch from BOG API
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    console.log(`📡 Status is pending, fetching from BOG API...`);
 
     const accessToken = await getBOGAccessToken();
     const response = await fetch(`${BOG_API_URL}/receipt/${bogOrderId}`, {
@@ -149,10 +124,7 @@ export const getBOGReceiptStatus = async (
       if (response.status === 404) {
         console.error(`❌ BOG API: Receipt not found for ${bogOrderId}`);
 
-        // If we have database info, return it
         if (dbOrder) {
-          console.log(`✅ Returning database info for pending order`);
-
           res.status(200).json({
             success: false,
             order_id: bogOrderId,
@@ -173,7 +145,6 @@ export const getBOGReceiptStatus = async (
           return;
         }
 
-        // No database record either
         res.status(404).json({
           success: false,
           message: "Receipt not found in BOG system",
@@ -184,30 +155,12 @@ export const getBOGReceiptStatus = async (
       }
 
       const errorText = await response.text();
-      console.error(`❌ BOG API error: ${errorText}`);
+
       throw new Error(`BOG API error: ${response.statusText} - ${errorText}`);
     }
 
     const receipt = await response.json();
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 📋 LOG RECEIPT DETAILS
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("📋 BOG RECEIPT STATUS");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log(`🆔 BOG Order ID: ${receipt.order_id}`);
-    console.log(`📌 External Order ID: ${receipt.external_order_id}`);
-    console.log(`📊 Status: ${receipt.order_status.key}`);
-    console.log(`🔢 Response Code: ${receipt.payment_detail?.code || "N/A"}`);
-    console.log(
-      `📝 Response Description: ${receipt.payment_detail?.code_description || "N/A"}`
-    );
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✅ RETURN RESPONSE
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const isSuccessful =
       receipt.order_status.key === "completed" &&
       receipt.payment_detail?.code === "100";
@@ -219,7 +172,6 @@ export const getBOGReceiptStatus = async (
       status: receipt.order_status.key,
       status_description: receipt.order_status.value,
 
-      // ✅ CRITICAL: Include payment response details
       payment_response: {
         code: receipt.payment_detail?.code,
         description: receipt.payment_detail?.code_description,
