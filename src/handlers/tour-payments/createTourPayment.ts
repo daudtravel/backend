@@ -168,10 +168,11 @@ export const handleBOGPayment = async (
           },
         ],
       },
-      // ✅ CRITICAL FIX: Use BOG's {order_id} placeholder, NOT external_order_id!
+      // ✅ SOLUTION: Use external_order_id in redirect URLs
+      // Frontend will look up BOG's order_id from database using this
       redirect_urls: {
-        success: `${process.env.FRONTEND_URL}/payment/success?order_id={order_id}`,
-        fail: `${process.env.FRONTEND_URL}/payment/failure?order_id={order_id}`,
+        success: `${process.env.FRONTEND_URL}/payment/success?order_id=${external_order_id}`,
+        fail: `${process.env.FRONTEND_URL}/payment/failure?order_id=${external_order_id}`,
       },
       buyer: {
         full_name: `${firstName} ${lastName}`,
@@ -201,11 +202,12 @@ export const handleBOGPayment = async (
     }
 
     const bogOrderData = await bogResponse.json();
-    const bogOrderId = bogOrderData.id; // ✅ This is BOG's order_id
+    const bogOrderId = bogOrderData.id;
     const paymentUrl = bogOrderData._links.redirect.href;
 
     console.log("✅ BOG Order Created Successfully!");
     console.log(`🆔 BOG Order ID: ${bogOrderId}`);
+    console.log(`📌 External Order ID: ${external_order_id}`);
     console.log(`🔗 Payment URL: ${paymentUrl}\n`);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -266,8 +268,8 @@ export const handleBOGPayment = async (
       Number(totalTourPrice),
       Number(paymentAmount),
       calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
-      external_order_id, // Your internal ID
-      bogOrderId, // ✅ BOG's order_id
+      external_order_id,
+      bogOrderId,
       "pending",
       paymentUrl,
       new Date(Date.now() + 30 * 60 * 1000),
@@ -281,8 +283,8 @@ export const handleBOGPayment = async (
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     res.status(201).json({
       success: true,
-      orderId: bogOrderId, // ✅ Return BOG's order_id (most important!)
-      externalOrderId: external_order_id, // Your internal reference
+      orderId: bogOrderId,
+      externalOrderId: external_order_id,
       paymentUrl: paymentUrl,
       detailsUrl: bogOrderData._links.details.href,
       amount: Number(paymentAmount),
