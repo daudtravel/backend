@@ -77,6 +77,9 @@ export const handleBOGPayment = async (
       remainingAmount,
     } = bookingData;
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ✅ VALIDATION
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if (!paymentAmount || paymentAmount <= 0) {
       res.status(400).json({
         success: false,
@@ -127,10 +130,28 @@ export const handleBOGPayment = async (
       return;
     }
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 📝 PREPARE ORDER DATA
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const external_order_id = `ORDER_${uuidv4()}`;
     const accessToken = await getBOGAccessToken();
     const cleanDescription = extractPlainText(bookingData.tourDescription);
 
+    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("📤 CREATING BOG TOUR PAYMENT ORDER");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(`📌 External Order ID: ${external_order_id}`);
+    console.log(`🎫 Tour: ${tourName}`);
+    console.log(`👥 People: ${peopleAmount}`);
+    console.log(
+      `💰 Payment: ${paymentAmount} GEL (${paymentType ? "Full" : "Reservation"})`
+    );
+    console.log(`📧 Customer: ${email}`);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 🔧 CREATE BOG ORDER
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const bogOrderRequest = {
       callback_url: getCallbackUrl(),
       external_order_id,
@@ -147,9 +168,15 @@ export const handleBOGPayment = async (
           },
         ],
       },
+      // ✅ CRITICAL FIX: Use BOG's {order_id} placeholder, NOT external_order_id!
       redirect_urls: {
-        success: `${process.env.FRONTEND_URL}/payment/success?order_id=${external_order_id}`,
-        fail: `${process.env.FRONTEND_URL}/payment/failure?order_id=${external_order_id}`,
+        success: `${process.env.FRONTEND_URL}/payment/success?order_id={order_id}`,
+        fail: `${process.env.FRONTEND_URL}/payment/failure?order_id={order_id}`,
+      },
+      buyer: {
+        full_name: `${firstName} ${lastName}`,
+        masked_email: email,
+        masked_phone: phone,
       },
       ttl: 30,
     };
@@ -167,12 +194,23 @@ export const handleBOGPayment = async (
 
     if (!bogResponse.ok) {
       const errorText = await bogResponse.text();
+      console.error("❌ BOG API Error:", errorText);
       throw new Error(
         `BOG API error: ${bogResponse.statusText} - ${errorText}`
       );
     }
 
     const bogOrderData = await bogResponse.json();
+    const bogOrderId = bogOrderData.id; // ✅ This is BOG's order_id
+    const paymentUrl = bogOrderData._links.redirect.href;
+
+    console.log("✅ BOG Order Created Successfully!");
+    console.log(`🆔 BOG Order ID: ${bogOrderId}`);
+    console.log(`🔗 Payment URL: ${paymentUrl}\n`);
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 💾 SAVE TO DATABASE
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const calculatedRemainingAmount = paymentType
       ? null
       : totalTourPrice - paymentAmount;
@@ -228,20 +266,24 @@ export const handleBOGPayment = async (
       Number(totalTourPrice),
       Number(paymentAmount),
       calculatedRemainingAmount ? Number(calculatedRemainingAmount) : null,
-      external_order_id,
-      bogOrderData.id,
+      external_order_id, // Your internal ID
+      bogOrderId, // ✅ BOG's order_id
       "pending",
-      bogOrderData._links.redirect.href,
+      paymentUrl,
       new Date(Date.now() + 30 * 60 * 1000),
     ];
 
-    await pool.query(insertQuery, values);
+    const { rows } = await pool.query(insertQuery, values);
+    console.log(`💾 Payment order saved to database (ID: ${rows[0].id})\n`);
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ✅ RETURN RESPONSE
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     res.status(201).json({
       success: true,
-      orderId: bogOrderData.id,
-      externalOrderId: external_order_id,
-      paymentUrl: bogOrderData._links.redirect.href,
+      orderId: bogOrderId, // ✅ Return BOG's order_id (most important!)
+      externalOrderId: external_order_id, // Your internal reference
+      paymentUrl: paymentUrl,
       detailsUrl: bogOrderData._links.details.href,
       amount: Number(paymentAmount),
       totalTourPrice: Number(totalTourPrice),
@@ -261,6 +303,7 @@ export const handleBOGPayment = async (
       },
     });
   } catch (error) {
+    console.error("❌ Error creating BOG payment:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create payment",
