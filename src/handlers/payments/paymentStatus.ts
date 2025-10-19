@@ -21,78 +21,66 @@ export const getBOGReceiptStatus = async (
     console.log(`\n🔍 Looking up order: ${order_id}`);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔍 STEP 1: Check database first (callback may have already updated it)
+    // 🔍 STEP 1: Check database first
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let bogOrderId = order_id;
     let dbOrder = null;
 
-    if (order_id.startsWith("ORDER_")) {
-      console.log("📌 This is an external_order_id, looking up in database...");
+    // Determine if this is an external_order_id or bog_order_id
+    const isExternalOrderId = order_id.startsWith("ORDER_");
 
-      const lookupQuery = `
-        SELECT 
-          bog_order_id, 
-          status, 
-          rejection_reason,
-          payment_response_code,
-          callback_data,
-          amount_paid,
-          payment_method,
-          transaction_id,
-          customer_email,
-          tour_name
-        FROM payment_orders 
-        WHERE external_order_id = $1
-        LIMIT 1;
-      `;
+    const lookupQuery = `
+      SELECT 
+        bog_order_id, 
+        external_order_id,
+        status, 
+        rejection_reason,
+        payment_response_code,
+        callback_data,
+        amount_paid,
+        payment_method,
+        transaction_id,
+        customer_email,
+        tour_name,
+        failed_at,
+        paid_at
+      FROM payment_orders 
+      WHERE ${isExternalOrderId ? "external_order_id" : "bog_order_id"} = $1
+      LIMIT 1;
+    `;
 
-      const { rows } = await pool.query(lookupQuery, [order_id]);
+    const { rows } = await pool.query(lookupQuery, [order_id]);
 
-      if (rows.length === 0) {
-        console.warn(`⚠️ No order found with external_order_id: ${order_id}`);
-        res.status(404).json({
-          success: false,
-          message: "Order not found in database",
-          order_id: order_id,
-        });
-        return;
-      }
-
+    if (rows.length > 0) {
       dbOrder = rows[0];
       bogOrderId = dbOrder.bog_order_id;
-      console.log(`✅ Found bog_order_id: ${bogOrderId}`);
-      console.log(`   Current status in DB: ${dbOrder.status}`);
+      console.log(`✅ Found order in database`);
+      console.log(`   BOG Order ID: ${bogOrderId}`);
+      console.log(`   Current status: ${dbOrder.status}`);
+
+      if (dbOrder.rejection_reason) {
+        console.log(`   Rejection reason: ${dbOrder.rejection_reason}`);
+      }
 
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // 🎯 IF DATABASE ALREADY HAS COMPLETED/FAILED STATUS, RETURN IT!
-      // This means the callback already processed it
+      // 🎯 IF DATABASE HAS COMPLETED/FAILED STATUS, RETURN IT!
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       if (dbOrder.status === "completed" || dbOrder.status === "failed") {
         console.log(`✅ Using cached status from database: ${dbOrder.status}`);
 
-        // Parse callback_data if available for detailed info
-        let callbackData = null;
-        try {
-          callbackData = dbOrder.callback_data
-            ? JSON.parse(dbOrder.callback_data)
-            : null;
-        } catch (e) {
-          console.warn("⚠️ Failed to parse callback_data");
-        }
-
-        // Build response from database
         const isSuccessful = dbOrder.status === "completed";
 
-        res.status(200).json({
+        // Build comprehensive response from database
+        const response = {
           success: isSuccessful,
           order_id: bogOrderId,
-          external_order_id: order_id,
+          external_order_id: dbOrder.external_order_id,
           status: dbOrder.status,
           status_description: isSuccessful
             ? "Payment completed successfully"
             : dbOrder.rejection_reason || "Payment failed",
 
-          // ✅ CRITICAL: Include payment response details from database
+          // ✅ CRITICAL: Include payment response details
           payment_response: {
             code:
               dbOrder.payment_response_code || (isSuccessful ? "100" : null),
@@ -114,92 +102,41 @@ export const getBOGReceiptStatus = async (
           payment_method: dbOrder.payment_method || "card",
           transaction_id: dbOrder.transaction_id,
 
-          // Include full callback data if available
-          ...(callbackData && { full_details: callbackData }),
-        });
-        return;
-      }
-    } else {
-      // If bog_order_id was provided directly, still check database
-      const lookupQuery = `
-        SELECT 
-          bog_order_id, 
-          status, 
-          rejection_reason,
-          payment_response_code,
-          callback_data,
-          amount_paid,
-          payment_method,
-          transaction_id
-        FROM payment_orders 
-        WHERE bog_order_id = $1
-        LIMIT 1;
-      `;
+          // Include timing information
+          ...(dbOrder.failed_at && { failed_at: dbOrder.failed_at }),
+          ...(dbOrder.paid_at && { paid_at: dbOrder.paid_at }),
+        };
 
-      const { rows } = await pool.query(lookupQuery, [order_id]);
-
-      if (rows.length > 0) {
-        dbOrder = rows[0];
-
-        // Return cached status if available
-        if (dbOrder.status === "completed" || dbOrder.status === "failed") {
-          console.log(
-            `✅ Using cached status from database: ${dbOrder.status}`
-          );
-
-          let callbackData = null;
+        // Add full callback data if available
+        if (dbOrder.callback_data) {
           try {
-            callbackData = dbOrder.callback_data
-              ? JSON.parse(dbOrder.callback_data)
-              : null;
+            const callbackData = JSON.parse(dbOrder.callback_data);
+            response.full_details = callbackData;
           } catch (e) {
             console.warn("⚠️ Failed to parse callback_data");
           }
-
-          const isSuccessful = dbOrder.status === "completed";
-
-          res.status(200).json({
-            success: isSuccessful,
-            order_id: bogOrderId,
-            status: dbOrder.status,
-            status_description: isSuccessful
-              ? "Payment completed successfully"
-              : dbOrder.rejection_reason || "Payment failed",
-
-            payment_response: {
-              code:
-                dbOrder.payment_response_code || (isSuccessful ? "100" : null),
-              description:
-                dbOrder.rejection_reason ||
-                (isSuccessful ? "Transaction approved" : "Payment failed"),
-              is_successful: isSuccessful,
-            },
-
-            amount: {
-              requested: parseFloat(dbOrder.amount_paid || "0"),
-              transferred: isSuccessful
-                ? parseFloat(dbOrder.amount_paid || "0")
-                : 0,
-              refunded: 0,
-              currency: "GEL",
-            },
-
-            payment_method: dbOrder.payment_method || "card",
-            transaction_id: dbOrder.transaction_id,
-
-            ...(callbackData && { full_details: callbackData }),
-          });
-          return;
         }
+
+        res.status(200).json(response);
+        return;
       }
+    } else if (isExternalOrderId) {
+      // If no database record found for external_order_id
+      console.warn(`⚠️ No order found with external_order_id: ${order_id}`);
+      res.status(404).json({
+        success: false,
+        message: "Order not found in database",
+        order_id: order_id,
+      });
+      return;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 🔍 STEP 2: If status is still "pending", fetch from BOG API
+    // 🔍 STEP 2: If status is "pending", fetch from BOG API
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    const accessToken = await getBOGAccessToken();
+    console.log(`📡 Status is pending, fetching from BOG API...`);
 
-    console.log(`📡 Fetching receipt from BOG API...`);
+    const accessToken = await getBOGAccessToken();
     const response = await fetch(`${BOG_API_URL}/receipt/${bogOrderId}`, {
       method: "GET",
       headers: {
@@ -212,23 +149,20 @@ export const getBOGReceiptStatus = async (
       if (response.status === 404) {
         console.error(`❌ BOG API: Receipt not found for ${bogOrderId}`);
 
-        // ✅ If we have database info about this order, return that
+        // If we have database info, return it
         if (dbOrder) {
-          console.log(`✅ Returning database info instead of 404`);
+          console.log(`✅ Returning database info for pending order`);
 
           res.status(200).json({
             success: false,
             order_id: bogOrderId,
-            external_order_id: order_id.startsWith("ORDER_")
-              ? order_id
-              : undefined,
-            status: dbOrder.status,
-            status_description: "Payment cancelled or expired",
+            external_order_id: dbOrder.external_order_id,
+            status: dbOrder.status || "pending",
+            status_description: "Payment session expired or cancelled",
 
             payment_response: {
               code: null,
               description:
-                dbOrder.rejection_reason ||
                 "Payment was not completed. The session may have expired or been cancelled.",
               is_successful: false,
             },
@@ -272,16 +206,20 @@ export const getBOGReceiptStatus = async (
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ✅ RETURN RESPONSE WITH PAYMENT_RESPONSE OBJECT
+    // ✅ RETURN RESPONSE
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const isSuccessful =
+      receipt.order_status.key === "completed" &&
+      receipt.payment_detail?.code === "100";
+
     res.status(200).json({
-      success: receipt.order_status.key === "completed",
+      success: isSuccessful,
       order_id: receipt.order_id,
       external_order_id: receipt.external_order_id,
       status: receipt.order_status.key,
       status_description: receipt.order_status.value,
 
-      // ✅ CRITICAL: Include payment response details for frontend
+      // ✅ CRITICAL: Include payment response details
       payment_response: {
         code: receipt.payment_detail?.code,
         description: receipt.payment_detail?.code_description,
