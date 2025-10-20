@@ -15,11 +15,6 @@ export const getPaymentOrder = async (
     );
     const offset = (pageNum - 1) * limitNum;
 
-    console.log("🔍 Fetching all payment orders:", {
-      page: pageNum,
-      limit: limitNum,
-    });
-
     const countQuery = `SELECT COUNT(*) as total FROM payment_orders`;
     const countResult = await pool.query(countQuery);
     const totalRecords = parseInt(countResult.rows[0].total);

@@ -19,7 +19,7 @@ export const handleBOGCallback = async (
 
     const signature = req.headers["callback-signature"] as string;
     if (!signature || !verifyBOGSignature(rawBody, signature)) {
-      console.error("❌ Invalid BOG callback signature!");
+      console.error("Invalid BOG callback signature");
       res.status(401).json({ error: "Invalid signature" });
       return;
     }
@@ -28,27 +28,20 @@ export const handleBOGCallback = async (
     try {
       callbackData = JSON.parse(rawBody);
     } catch {
-      console.error("❌ Invalid JSON in callback data");
+      console.error("Invalid JSON in callback data");
       res.status(400).json({ error: "Invalid JSON in callback data" });
       return;
     }
 
-    console.log("📨 BOG Callback received:", {
-      event: callbackData.event,
-      order_id: callbackData.body?.order_id,
-      status: callbackData.body?.order_status?.key,
-      timestamp: callbackData.zoned_request_time,
-    });
-
     if (callbackData.event !== "order_payment") {
-      console.error("❌ Invalid event type:", callbackData.event);
+      console.error("Invalid event type:", callbackData.event);
       res.status(400).json({ error: "Invalid event type" });
       return;
     }
 
     const orderData = callbackData.body;
     if (!orderData?.order_id) {
-      console.error("❌ Missing order_id in callback");
+      console.error("Missing order_id in callback");
       res.status(400).json({ error: "Missing order_id" });
       return;
     }
@@ -62,13 +55,9 @@ export const handleBOGCallback = async (
         break;
       case "created":
       case "processing":
-        console.log(
-          `ℹ️  Payment ${orderData.order_status.key}: ${orderData.order_id}`
-        );
         await handleOtherStatus(orderData);
         break;
       default:
-        console.warn(`⚠️  Unknown status: ${orderData.order_status?.key}`);
         await handleOtherStatus(orderData);
     }
 
@@ -80,8 +69,7 @@ export const handleBOGCallback = async (
       processed_at: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("❌ ERROR processing BOG callback:", error);
-    console.error("Request body:", JSON.stringify(req.body, null, 2));
+    console.error("Error processing BOG callback:", error);
 
     res.status(200).json({
       success: false,
@@ -93,8 +81,6 @@ export const handleBOGCallback = async (
 
 async function handlePaymentSuccess(orderData: any) {
   try {
-    console.log(`✅ Processing successful payment: ${orderData.order_id}`);
-
     const updateQuery = `
       UPDATE payment_orders 
       SET 
@@ -126,22 +112,12 @@ async function handlePaymentSuccess(orderData: any) {
     const { rows } = await pool.query(updateQuery, values);
 
     if (rows.length === 0) {
-      console.warn(
-        `⚠️ No order found in database for order_id: ${orderData.order_id}`
-      );
       return;
     }
 
     const successOrder = rows[0];
 
-    console.log(`✅ Payment completed for order ${successOrder.id}:`, {
-      customer: successOrder.customer_email,
-      amount: successOrder.amount_paid,
-      transaction_id: successOrder.transaction_id,
-    });
-
     if (!successOrder.customer_email) {
-      console.warn("⚠️ No customer email found, skipping success email");
       return;
     }
 
@@ -151,18 +127,14 @@ async function handlePaymentSuccess(orderData: any) {
       email: successOrder.customer_email,
       detailsLink: `https://daudtravel.com/tours/order/${successOrder.id}`,
     });
-
-    console.log(`📧 Success email sent to: ${successOrder.customer_email}`);
   } catch (error) {
-    console.error("❌ Error in handlePaymentSuccess:", error);
+    console.error("Error in handlePaymentSuccess:", error);
     throw error;
   }
 }
 
 async function handlePaymentFailure(orderData: any) {
   try {
-    console.log(`❌ Processing failed payment: ${orderData.order_id}`);
-
     const failureReason =
       orderData.payment_detail?.code_description ||
       orderData.reject_reason ||
@@ -188,37 +160,9 @@ async function handlePaymentFailure(orderData: any) {
       orderData.order_id,
     ];
 
-    const { rows } = await pool.query(updateQuery, values);
-
-    if (rows.length === 0) {
-      console.warn(
-        `⚠️ No order found in database for order_id: ${orderData.order_id}`
-      );
-      return;
-    }
-
-    const failedOrder = rows[0];
-
-    console.log(`❌ Payment failed for order ${failedOrder.id}:`, {
-      customer: failedOrder.customer_email,
-      reason: failureReason,
-      code: orderData.payment_detail?.code,
-    });
-
-    if (!failedOrder.customer_email) {
-      console.warn("⚠️ No customer email found, skipping failure email");
-      return;
-    }
-
-    // TODO: Implement sendPaymentFailureEmail if needed
-    // await sendPaymentFailureEmail({
-    //   firstName: failedOrder.customer_first_name || "Customer",
-    //   lastName: failedOrder.customer_last_name || "",
-    //   email: failedOrder.customer_email,
-    //   reason: failureReason,
-    // });
+    await pool.query(updateQuery, values);
   } catch (error) {
-    console.error("❌ Error in handlePaymentFailure:", error);
+    console.error("Error in handlePaymentFailure:", error);
     throw error;
   }
 }
@@ -226,8 +170,6 @@ async function handlePaymentFailure(orderData: any) {
 async function handleOtherStatus(orderData: any) {
   try {
     const statusKey = orderData.order_status?.key || "unknown";
-
-    console.log(`ℹ️  Processing status '${statusKey}': ${orderData.order_id}`);
 
     const updateQuery = `
       UPDATE payment_orders 
@@ -241,19 +183,9 @@ async function handleOtherStatus(orderData: any) {
 
     const values = [statusKey, JSON.stringify(orderData), orderData.order_id];
 
-    const { rows } = await pool.query(updateQuery, values);
-
-    if (rows.length > 0) {
-      console.log(
-        `✅ Status updated to '${statusKey}' for order ${rows[0].id}`
-      );
-    } else {
-      console.warn(
-        `⚠️ No order found in database for order_id: ${orderData.order_id}`
-      );
-    }
+    await pool.query(updateQuery, values);
   } catch (error) {
-    console.error("❌ Error in handleOtherStatus:", error);
+    console.error("Error in handleOtherStatus:", error);
     throw error;
   }
 }
