@@ -248,6 +248,13 @@ export const handleBOGPayment = async (
       new Date(Date.now() + 30 * 60 * 1000),
     ];
 
+    // ✅ CRITICAL FIX: Execute the INSERT query!
+    await pool.query(insertQuery, values);
+
+    console.log(
+      `✅ Payment order created: ${external_order_id} (BOG: ${bogOrderId})`
+    );
+
     res.status(201).json({
       success: true,
       orderId: bogOrderId,
