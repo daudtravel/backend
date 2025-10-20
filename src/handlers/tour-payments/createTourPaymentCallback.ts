@@ -33,6 +33,13 @@ export const handleBOGCallback = async (
       return;
     }
 
+    console.log("📨 BOG Callback received:", {
+      event: callbackData.event,
+      order_id: callbackData.body?.order_id,
+      status: callbackData.body?.order_status?.key,
+      timestamp: callbackData.zoned_request_time,
+    });
+
     if (callbackData.event !== "order_payment") {
       console.error("❌ Invalid event type:", callbackData.event);
       res.status(400).json({ error: "Invalid event type" });
@@ -53,7 +60,15 @@ export const handleBOGCallback = async (
       case "rejected":
         await handlePaymentFailure(orderData);
         break;
+      case "created":
+      case "processing":
+        console.log(
+          `ℹ️  Payment ${orderData.order_status.key}: ${orderData.order_id}`
+        );
+        await handleOtherStatus(orderData);
+        break;
       default:
+        console.warn(`⚠️  Unknown status: ${orderData.order_status?.key}`);
         await handleOtherStatus(orderData);
     }
 
@@ -78,24 +93,32 @@ export const handleBOGCallback = async (
 
 async function handlePaymentSuccess(orderData: any) {
   try {
+    console.log(`✅ Processing successful payment: ${orderData.order_id}`);
+
     const updateQuery = `
       UPDATE payment_orders 
       SET 
         status = 'completed',
         transaction_id = $1,
         payment_method = $2,
-        paid_amount = $3,
+        amount_paid = $3,
+        payment_response_code = $4,
         paid_at = CURRENT_TIMESTAMP,
-        callback_data = $4,
+        callback_data = $5,
         updated_at = CURRENT_TIMESTAMP
-      WHERE bog_order_id = $5 OR external_order_id = $5
+      WHERE bog_order_id = $6 OR external_order_id = $6
       RETURNING *;
     `;
 
     const values = [
-      orderData.payment_detail?.transaction_id,
-      orderData.payment_detail?.transfer_method?.key,
-      orderData.purchase_units?.request_amount,
+      orderData.payment_detail?.transaction_id || null,
+      orderData.payment_detail?.transfer_method?.key || "card",
+      parseFloat(
+        orderData.purchase_units?.transfer_amount ||
+          orderData.purchase_units?.request_amount ||
+          "0"
+      ),
+      orderData.payment_detail?.code || "100",
       JSON.stringify(orderData),
       orderData.order_id,
     ];
@@ -111,6 +134,12 @@ async function handlePaymentSuccess(orderData: any) {
 
     const successOrder = rows[0];
 
+    console.log(`✅ Payment completed for order ${successOrder.id}:`, {
+      customer: successOrder.customer_email,
+      amount: successOrder.amount_paid,
+      transaction_id: successOrder.transaction_id,
+    });
+
     if (!successOrder.customer_email) {
       console.warn("⚠️ No customer email found, skipping success email");
       return;
@@ -122,6 +151,8 @@ async function handlePaymentSuccess(orderData: any) {
       email: successOrder.customer_email,
       detailsLink: `https://daudtravel.com/tours/order/${successOrder.id}`,
     });
+
+    console.log(`📧 Success email sent to: ${successOrder.customer_email}`);
   } catch (error) {
     console.error("❌ Error in handlePaymentSuccess:", error);
     throw error;
@@ -130,6 +161,8 @@ async function handlePaymentSuccess(orderData: any) {
 
 async function handlePaymentFailure(orderData: any) {
   try {
+    console.log(`❌ Processing failed payment: ${orderData.order_id}`);
+
     const failureReason =
       orderData.payment_detail?.code_description ||
       orderData.reject_reason ||
@@ -150,7 +183,7 @@ async function handlePaymentFailure(orderData: any) {
 
     const values = [
       failureReason,
-      orderData.payment_detail?.code,
+      orderData.payment_detail?.code || null,
       JSON.stringify(orderData),
       orderData.order_id,
     ];
@@ -165,12 +198,25 @@ async function handlePaymentFailure(orderData: any) {
     }
 
     const failedOrder = rows[0];
- 
+
+    console.log(`❌ Payment failed for order ${failedOrder.id}:`, {
+      customer: failedOrder.customer_email,
+      reason: failureReason,
+      code: orderData.payment_detail?.code,
+    });
 
     if (!failedOrder.customer_email) {
       console.warn("⚠️ No customer email found, skipping failure email");
       return;
     }
+
+    // TODO: Implement sendPaymentFailureEmail if needed
+    // await sendPaymentFailureEmail({
+    //   firstName: failedOrder.customer_first_name || "Customer",
+    //   lastName: failedOrder.customer_last_name || "",
+    //   email: failedOrder.customer_email,
+    //   reason: failureReason,
+    // });
   } catch (error) {
     console.error("❌ Error in handlePaymentFailure:", error);
     throw error;
@@ -179,6 +225,10 @@ async function handlePaymentFailure(orderData: any) {
 
 async function handleOtherStatus(orderData: any) {
   try {
+    const statusKey = orderData.order_status?.key || "unknown";
+
+    console.log(`ℹ️  Processing status '${statusKey}': ${orderData.order_id}`);
+
     const updateQuery = `
       UPDATE payment_orders 
       SET 
@@ -189,16 +239,14 @@ async function handleOtherStatus(orderData: any) {
       RETURNING *;
     `;
 
-    const values = [
-      orderData.order_status?.key,
-      JSON.stringify(orderData),
-      orderData.order_id,
-    ];
+    const values = [statusKey, JSON.stringify(orderData), orderData.order_id];
 
     const { rows } = await pool.query(updateQuery, values);
 
     if (rows.length > 0) {
-      console.log(`✅ Status updated to: ${orderData.order_status?.key}`);
+      console.log(
+        `✅ Status updated to '${statusKey}' for order ${rows[0].id}`
+      );
     } else {
       console.warn(
         `⚠️ No order found in database for order_id: ${orderData.order_id}`
